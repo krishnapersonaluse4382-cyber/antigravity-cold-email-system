@@ -1,0 +1,17 @@
+{
+  "name": "coldemailautomation",
+  "version": "1.0.0",
+  "description": "",
+  "main": "clean_leads.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "csv-parse": "^6.1.0",
+    "nodemailer": "^8.0.1"
+  }
+}
