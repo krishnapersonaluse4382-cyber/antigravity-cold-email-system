@@ -1,0 +1,67 @@
+name: Send Cold Emails
+
+# ─── Triggers ─────────────────────────────────────────────────────────────────
+# 5 runs per day (IST times shown → converted to UTC):
+#   08:00 AM IST = 02:30 UTC
+#   11:00 AM IST = 05:30 UTC
+#   02:00 PM IST = 08:30 UTC
+#   05:30 PM IST = 12:00 UTC
+#   08:30 PM IST = 15:00 UTC
+#
+# Each run sends 1 email per account (Krishna + Ryan + Rik = 3 emails)
+# PLUS a random 2–55 min sleep inside the script before sending,
+# so actual inbox delivery time is completely unpredictable.
+#
+# Total: 5 runs × 3 emails = 15 emails/day (safe for warmup phase)
+
+on:
+  schedule:
+    - cron: '30 2 * * *'   # 08:00 AM IST
+    - cron: '30 5 * * *'   # 11:00 AM IST
+    - cron: '30 8 * * *'   # 02:00 PM IST
+    - cron: '0 12 * * *'   # 05:30 PM IST
+    - cron: '0 15 * * *'   # 08:30 PM IST
+
+  # Also allows manual trigger from GitHub UI (Actions tab → Run workflow)
+  workflow_dispatch:
+
+# Needs write permission to commit the updated email_state.json back
+permissions:
+  contents: write
+
+# ─── Job ──────────────────────────────────────────────────────────────────────
+jobs:
+  send-emails:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90   # allows up to 55 min random sleep + send time
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Send emails
+        env:
+          KRISHNA_PASS:    ${{ secrets.KRISHNA_PASS }}
+          RYAN_PASS:       ${{ secrets.RYAN_PASS }}
+          RIK_PASS:        ${{ secrets.RIK_PASS }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: node cloud_send.js
+
+      - name: Save updated email state back to repo
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "GitHub Actions"
+          git add email_state.json
+          git diff --staged --quiet || git commit -m "chore: update email state [skip ci]"
+          git push

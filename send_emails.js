@@ -20,7 +20,8 @@ const CL_SOURCE = args.find(a => a.startsWith('--source='))?.split('=')[1] || 'D
 const CL_LIMIT = args.find(a => a.startsWith('--limit='))?.split('=')[1];
 
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
-const TRACKER_BASE_URL = 'https://email-tracker-contentelevators.vercel.app';
+const TRACKER_BASE_URL = 'https://email-tracker-contentelevators.vercel.app'; // Keep as backend for pixel
+const DASHBOARD_URL = 'https://email-analytics-dashboard.vercel.app';
 const SUPABASE_URL = 'https://psqebjafyjrtxarphkej.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBzcWViamFmeWpydHhhcnBoa2VqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE5MjY4NTEsImV4cCI6MjA4NzUwMjg1MX0.2A8zmceqZP3azTzTvviqA6O2gFSGSG5WbmYk60q86wY';
 
@@ -50,12 +51,9 @@ const ACCOUNTS = [
 ];
 
 const SUBJECT_CATEGORIES = [
-    'INTERACTION_STATS',
-    'BUYER_TOUR',
-    'VIEWER_FOLLOWER',
-    'RANKING_AUTHORITY',
+    'FOLLOWER_HOOK',
     'FAMILY_HOOK',
-    'CLOSE_FRIEND'
+    'AUTHORITY_HOOK'
 ];
 
 const BODY_CATEGORIES = [
@@ -360,7 +358,7 @@ async function main() {
     }
 
     console.log(`\n✨ Done! Sent ${sentCount} emails today (${state.dailySent}/${dailyLimit} total).`);
-    console.log(`📈 Dashboard: ${TRACKER_BASE_URL}`);
+    console.log(`📈 Dashboard: ${DASHBOARD_URL}`);
 }
 
 main().catch(err => {
