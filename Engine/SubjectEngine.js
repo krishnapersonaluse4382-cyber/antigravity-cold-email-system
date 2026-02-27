@@ -1,96 +1,50 @@
 /**
- * SubjectEngine.js
- * Generates dynamic, varied, and psychologically grounded subject lines.
+ * SubjectEngine.js - Cashvertising Edition
+ * Generates subject lines that trigger Curiosity and Specificity.
  */
 
 class SubjectEngine {
     constructor() {
-        this.socialMediaTypes = ['reel', 'video', 'story', 'post'];
-        this.interactions = ['likes', 'shares', 'comments', 'saves', 'dms'];
-    }
-
-    getRandomInt(min, max) {
-        return Math.floor(Math.random() * (max - min + 1)) + min;
+        this.socialMediaTypes = ['reel', 'video', 'post', 'profile', 'bio'];
     }
 
     pickRandom(arr) {
         return arr[Math.floor(Math.random() * arr.length)];
     }
 
-    formatNumber(num) {
-        if (num >= 1000) {
-            return (num / 1000).toFixed(0) + 'k';
-        }
-        return num.toString();
-    }
-
     generate(type, data) {
         const name = data.firstName;
         const industry = data.industry || 'Real Estate';
+        const city = data.city || 'your area';
+        const contentPiece = this.pickRandom(this.socialMediaTypes);
 
-        switch (type) {
-            case 'INTERACTION_STATS':
-                const interaction = this.pickRandom(this.interactions);
-                const platformItem = this.pickRandom(this.socialMediaTypes);
+        const templates = {
+            'INTERACTION_STATS': [
+                { id: 'INTERACTION_STATS_DM', subject: `specfic feedback on your ${city} ${contentPiece}`, preview: "Regarding the lead friction we chatted about" },
+                { id: 'INTERACTION_STATS_GENERAL', subject: `observation on your ${industry} content flow`, preview: "Found a technical leak on your profile" }
+            ],
+            'CLOSE_FRIEND': [
+                { id: 'FRIEND_BUSY', subject: `quick question re: your ${city} strategy, ${name}`, preview: "Regarding your current inquiry volume" },
+                { id: 'FRIEND_SEE_THIS', subject: `have you looked at these ${city} ${industry} stats?`, preview: "Just saw this and thought of your page" }
+            ],
+            'ACTIVE_BUYER': [
+                { id: 'BUYER_TOUR', subject: `inquiry re: your ${city} listings, ${name}`, preview: "Looking for specific inventory details" },
+                { id: 'BUYER_OFF_MARKET', subject: `quick q: do you handle off-market in ${city}?`, preview: "I have a specific requirement for a client" }
+            ],
+            'CURIOUS_FOLLOWER': [
+                { id: 'FOLLOW_FAN', subject: `really liked that last ${contentPiece}, ${name}`, preview: "Specifically the perspective on the ${city} market" },
+                { id: 'FOLLOW_STUDY', subject: `analyzed your ${industry} content loop this morning`, preview: "Found something very interesting regarding the lead flow" }
+            ],
+            'INDUSTRY_AUTHORITY': [
+                { id: 'AUTHORITY_RANKING', subject: `congrats on the ${city} authority mention, ${name}`, preview: "You're clearly dominating the ${industry} market" }
+            ],
+            'FAMILY_BRIDGE': [
+                { id: 'FAMILY_HOOK', subject: `partner just flagged your ${contentPiece} to me`, preview: "They thought your ${city} ${industry} strategy was spot on" }
+            ]
+        };
 
-                if (interaction === 'dms') {
-                    // Specific logic for DMs: "Name, 10 people messaged you"
-                    const dmCount = this.getRandomInt(10, 30);
-                    return {
-                        subject: `${name}, ${dmCount} people messaged you`,
-                        preview: "on instagram"
-                    };
-                }
-
-                const count = this.formatNumber(this.getRandomInt(1000, 5000));
-                return {
-                    subject: `${name}, your ${platformItem} got ${count} ${interaction}`,
-                    preview: `regarding your ${platformItem}`
-                };
-
-            case 'BUYER_TOUR':
-                const buyerLines = [
-                    { subject: `${name}, Can I tour a listing?`, preview: "re: your inventory" },
-                    { subject: `${name}, what houses are in your inventory?`, preview: "checking listings" },
-                    { subject: `Quick question about that house in your video, ${name}`, preview: "serious inquiry" }
-                ];
-                return this.pickRandom(buyerLines);
-
-            case 'VIEWER_FOLLOWER':
-                const followerLines = [
-                    { subject: `Hi ${name}, your viewer/follower here!`, preview: "love your content" },
-                    { subject: `Hi ${name}, I've followed you!`, preview: "new fan check-in" },
-                    { subject: `Hi ${name}, your new viewer/follower here!`, preview: "on social media" }
-                ];
-                return this.pickRandom(followerLines);
-
-            case 'RANKING_AUTHORITY':
-                return {
-                    subject: `${name}, why're you in the best ${industry} ranking!`,
-                    preview: "congratulations on the mention"
-                };
-
-            case 'FAMILY_HOOK':
-                const familyMember = this.pickRandom(['dad', 'brother', 'sister', 'mom', 'business partner']);
-                return {
-                    subject: `Hey ${name}, My ${familyMember} liked your video.`,
-                    preview: "thought I should reach out"
-                };
-
-            case 'CLOSE_FRIEND':
-                const friendLines = [
-                    { subject: `You busy today, ${name}?`, preview: "quick question" },
-                    { subject: `Hey ${name}, quick check in`, preview: "regarding your business" },
-                    { subject: `${name}, did you see this yet?`, preview: "important update" }
-                ];
-                return this.pickRandom(friendLines);
-
-            default:
-                return {
-                    subject: `Quick question, ${name}`,
-                    preview: "regarding your content"
-                };
-        }
+        const category = templates[type] || templates['CURIOUS_FOLLOWER'];
+        return this.pickRandom(category);
     }
 }
 

@@ -13,6 +13,12 @@ const BodyEngine = require('./Engine/BodyEngine');
 const subjectEngine = new SubjectEngine();
 const bodyEngine = new BodyEngine();
 
+// Parse Command Line Arguments
+const args = process.argv.slice(2);
+const CL_CATEGORY = args.find(a => a.startsWith('--category='))?.split('=')[1] || null;
+const CL_SOURCE = args.find(a => a.startsWith('--source='))?.split('=')[1] || 'Direct';
+const CL_LIMIT = args.find(a => a.startsWith('--limit='))?.split('=')[1];
+
 // ─── CONFIG ──────────────────────────────────────────────────────────────────
 const TRACKER_BASE_URL = 'https://email-tracker-contentelevators.vercel.app';
 const SUPABASE_URL = 'https://psqebjafyjrtxarphkej.supabase.co';
@@ -61,15 +67,37 @@ const BODY_CATEGORIES = [
 
 // ─── WARMUP SCHEDULE ──────────────────────────────────────────────────────────
 function getDailyLimit(state) {
-    const daysSinceStart = Math.floor((Date.now() - state.startedAt) / 86400000);
-    if (daysSinceStart < 1) return 10;
-    if (daysSinceStart < 2) return 15;
-    if (daysSinceStart < 3) return 20;
-    if (daysSinceStart < 4) return 30;
-    if (daysSinceStart < 5) return 40;
-    if (daysSinceStart < 6) return 50;
-    return 60; // max per day (20 per account x 3 accounts)
+    const daysSinceStart = Math.floor((Date.now() - (state.startedAt || Date.now())) / 86400000);
+
+    // Calculate base warmup limit
+    let warmupLimit = 5;
+    if (daysSinceStart < 1) warmupLimit = 5;
+    else if (daysSinceStart <= 3) warmupLimit = 10;
+    else if (daysSinceStart <= 5) warmupLimit = 20;
+    else if (daysSinceStart <= 10) warmupLimit = 30;
+    else warmupLimit = 35;
+
+    if (CL_LIMIT) {
+        const requestedLimit = parseInt(CL_LIMIT);
+        // Always respect the lower of the two for safety, 
+        // unless we want to allow user to override, but the user explicitly complained about the override.
+        if (requestedLimit > warmupLimit) {
+            console.warn(`  ⚠️  Warning: Requested limit (${requestedLimit}) exceeds warmup safety cap (${warmupLimit}). Adhering to safety cap.`);
+            return warmupLimit;
+        }
+        return requestedLimit;
+    }
+
+    return warmupLimit;
 }
+
+// ─── STOP MECHANISM ──────────────────────────────────────────────────────────
+let isStopping = false;
+process.on('SIGINT', () => {
+    console.log('\n🛑 Stop signal received. Gracefully stopping after current task...');
+    isStopping = true;
+});
+
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 function sleep(ms) {
@@ -95,9 +123,8 @@ function pickSubject(firstName, industry) {
     return subjectEngine.generate(category, { firstName, industry });
 }
 
-function pickBody(firstName, senderFirstName, city, industry) {
-    const category = BODY_CATEGORIES[Math.floor(Math.random() * BODY_CATEGORIES.length)];
-    return bodyEngine.generate(category, { firstName, senderName: senderFirstName, city, industry });
+function pickBody(firstName, senderFirstName, city, industry, subjectObj) {
+    return bodyEngine.generate(subjectObj, { firstName, senderName: senderFirstName, city, industry });
 }
 
 function buildHtmlEmail(bodyText, trackingPixelUrl, preheaderText = "") {
@@ -132,8 +159,21 @@ function escapeHtml(str) {
 }
 
 // ─── SUPABASE LOG ─────────────────────────────────────────────────────────────
-async function logEmailSent({ emailId, recipient, subject, sender }) {
+async function logEmailSent(data) {
+    const { emailId, recipient, subject, sender, category, subjectType, bodyType, source } = data;
     try {
+        const payload = {
+            email_id: emailId,
+            recipient,
+            subject,
+            sender,
+            category: category || 'General',
+            subject_type: subjectType,
+            body_type: bodyType,
+            lead_source: source || 'Direct',
+            sent_at: new Date().toISOString()
+        };
+
         const res = await fetch(`${SUPABASE_URL}/rest/v1/email_sent`, {
             method: 'POST',
             headers: {
@@ -142,16 +182,21 @@ async function logEmailSent({ emailId, recipient, subject, sender }) {
                 'Content-Type': 'application/json',
                 'Prefer': 'return=minimal'
             },
-            body: JSON.stringify({ email_id: emailId, recipient, subject, sender })
+            body: JSON.stringify(payload)
         });
+
         if (!res.ok) {
             const err = await res.text();
-            console.warn(`  ⚠ Supabase log failed (${res.status}): ${err.substring(0, 100)}`);
+            console.error(`  ❌ Supabase log failed (${res.status}): ${err}`);
+            // Check if key is expired or URL is wrong
+        } else {
+            // console.log(`  📊 Logged to Supabase: ${emailId}`);
         }
     } catch (e) {
         console.warn('  ⚠ Supabase log error:', e.message);
     }
 }
+
 
 // ─── STATE MANAGEMENT ────────────────────────────────────────────────────────
 function loadState() {
@@ -232,11 +277,26 @@ async function main() {
     console.log(`🚀 Sending ${toSend} emails...\n`);
 
     for (let i = 0; i < toSend; i++) {
+        if (isStopping) {
+            console.log('🛑 Process stopped by user.');
+            break;
+        }
+
+        // Safety: Ensure accountIndex exists and is a number
+        if (typeof state.accountIndex !== 'number') state.accountIndex = 0;
+
         const lead = leads[state.lastIndex];
         const account = ACCOUNTS[state.accountIndex % ACCOUNTS.length];
 
+        if (!account) {
+            console.error("❌ Critical: No email accounts configured correctly.");
+            process.exit(1);
+        }
+
         const firstName = getFirstName(lead.Name || lead.name || lead['First Name']);
-        const email = (lead.Email || lead.email || '').trim();
+        // Sanitize email: Remove spaces and invalid tailing characters like ] or )
+        const rawEmail = (lead.Email || lead.email || '').trim();
+        const email = rawEmail.replace(/[^a-zA-Z0-9@._+-].*$/, '').trim();
 
         if (!email || !email.includes('@')) {
             console.log(`  [${state.lastIndex + 1}] Skipping — no valid email for ${lead.Name}`);
@@ -254,7 +314,7 @@ async function main() {
         const subject = subjectObj.subject;
         const preview = subjectObj.preview;
 
-        const bodyText = pickBody(firstName, account.name, city, industry);
+        const bodyText = pickBody(firstName, account.name, city, industry, subjectObj);
         const htmlBody = buildHtmlEmail(bodyText, trackingUrl, preview);
 
         try {
@@ -272,7 +332,11 @@ async function main() {
                 emailId,
                 recipient: email,
                 subject,
-                sender: account.user
+                sender: account.user,
+                category: CL_CATEGORY || industry,
+                subjectType: subjectObj.id,
+                bodyType: bodyText.includes('Conversion Killer') ? 'INTRIGUE' : 'STANDARD',
+                source: CL_SOURCE
             });
 
             console.log(`  ✅ [${state.lastIndex + 1}] Sent to ${email} via ${account.name} — "${subject}"`);
