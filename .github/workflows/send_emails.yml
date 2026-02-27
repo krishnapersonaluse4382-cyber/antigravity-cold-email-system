@@ -1,39 +1,41 @@
 name: Send Cold Emails
 
-# ─── Triggers ─────────────────────────────────────────────────────────────────
-# 5 runs per day (IST times shown → converted to UTC):
-#   08:00 AM IST = 02:30 UTC
-#   11:00 AM IST = 05:30 UTC
-#   02:00 PM IST = 08:30 UTC
-#   05:30 PM IST = 12:00 UTC
-#   08:30 PM IST = 15:00 UTC
+# ── HOW THIS WORKS ────────────────────────────────────────────────────────────
+# 8 triggers spread across the day (IST times listed in comments).
+# Each trigger:
+#   1. Sleeps a random 0–25 min (so actual send time is unpredictable)
+#   2. Sends 1 email from Krishna
+#   3. Waits a random 10–20 min gap
+#   4. Sends 1 email from Ryan
+#   5. Waits a random 10–20 min gap
+#   6. Sends 1 email from Rik
 #
-# Each run sends 1 email per account (Krishna + Ryan + Rik = 3 emails)
-# PLUS a random 2–55 min sleep inside the script before sending,
-# so actual inbox delivery time is completely unpredictable.
-#
-# Total: 5 runs × 3 emails = 15 emails/day (safe for warmup phase)
+# Result: 8 runs × 3 accounts = 24 emails per day
+# Each account sends exactly 8 emails, all at genuinely different times.
+# No two accounts ever fire at the same moment.
+# ─────────────────────────────────────────────────────────────────────────────
 
 on:
   schedule:
-    - cron: '30 2 * * *'   # 08:00 AM IST
-    - cron: '30 5 * * *'   # 11:00 AM IST
-    - cron: '30 8 * * *'   # 02:00 PM IST
-    - cron: '0 12 * * *'   # 05:30 PM IST
-    - cron: '0 15 * * *'   # 08:30 PM IST
+    - cron: '0 3 * * *'    # ~08:30 AM IST
+    - cron: '0 4 * * *'    # ~09:30 AM IST
+    - cron: '30 5 * * *'   # ~11:00 AM IST
+    - cron: '0 7 * * *'    # ~12:30 PM IST
+    - cron: '30 8 * * *'   # ~02:00 PM IST
+    - cron: '0 10 * * *'   # ~03:30 PM IST
+    - cron: '30 11 * * *'  # ~05:00 PM IST
+    - cron: '0 13 * * *'   # ~06:30 PM IST
 
-  # Also allows manual trigger from GitHub UI (Actions tab → Run workflow)
+  # Manual trigger — visible in GitHub → Actions tab → "Send Cold Emails" → "Run workflow"
   workflow_dispatch:
 
-# Needs write permission to commit the updated email_state.json back
 permissions:
   contents: write
 
-# ─── Job ──────────────────────────────────────────────────────────────────────
 jobs:
   send-emails:
     runs-on: ubuntu-latest
-    timeout-minutes: 90   # allows up to 55 min random sleep + send time
+    timeout-minutes: 90
 
     steps:
       - name: Checkout repository
@@ -50,18 +52,19 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Send emails
+      - name: Send emails (1 per account, staggered)
         env:
-          KRISHNA_PASS:    ${{ secrets.KRISHNA_PASS }}
-          RYAN_PASS:       ${{ secrets.RYAN_PASS }}
-          RIK_PASS:        ${{ secrets.RIK_PASS }}
+          KRISHNA_PASS:     ${{ secrets.KRISHNA_PASS }}
+          RYAN_PASS:        ${{ secrets.RYAN_PASS }}
+          RIK_PASS:         ${{ secrets.RIK_PASS }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: node cloud_send.js
 
-      - name: Save updated email state back to repo
+      - name: Commit updated email state back to repo
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "GitHub Actions"
+          git pull --rebase origin main
           git add email_state.json
           git diff --staged --quiet || git commit -m "chore: update email state [skip ci]"
           git push
