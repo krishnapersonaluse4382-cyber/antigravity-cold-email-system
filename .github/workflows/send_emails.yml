@@ -29,6 +29,7 @@ on:
   # Manual trigger — visible in GitHub → Actions tab → "Send Cold Emails" → "Run workflow"
   workflow_dispatch:
 
+
 permissions:
   contents: write
 

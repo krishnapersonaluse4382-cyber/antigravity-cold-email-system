@@ -168,10 +168,58 @@ async function main() {
     const leads = parse(fs.readFileSync(LEADS_CSV, 'utf8'), { columns: true, skip_empty_lines: true });
     console.log(`✅  Loaded ${leads.length} leads`);
 
-    // ── Load state ──
-    let state = { lastIndex: 0, dailySent: 0, accountIndex: 0, lastDate: '', startedAt: Date.now() };
+    // ── Load state from Supabase — Falling back to local file if DB fails ──
+    async function getDbState() {
+        if (!SUPABASE_ANON_KEY) return null;
+        try {
+            const res = await fetch(`${SUPABASE_URL}/rest/v1/email_sent?recipient_email=eq.__automation_state__@internal.system&select=subject&order=sent_at.desc&limit=1`, {
+                headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+            });
+            const data = await res.json();
+            if (data && data.length > 0) {
+                const dbIndex = parseInt(data[0].subject, 10);
+                if (!isNaN(dbIndex)) return { lastIndex: dbIndex };
+            }
+        } catch (e) { console.warn('  ⚠ DB State fetch error:', e.message); }
+        return null;
+    }
+
+    async function updateDbState(newIndex) {
+        if (!SUPABASE_ANON_KEY) return;
+        try {
+            await fetch(`${SUPABASE_URL}/rest/v1/email_sent`, {
+                method: 'POST',
+                headers: {
+                    'apikey': SUPABASE_ANON_KEY,
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify({
+                    email_id: 'STATE_UPDATE_' + Date.now(),
+                    recipient: '__automation_state__@internal.system',
+                    subject: String(newIndex),
+                    sender: 'SYSTEM',
+                    category: 'INTERNAL_STATE',
+                    sent_at: new Date().toISOString()
+                })
+            });
+        } catch (e) { console.warn('  ⚠ DB State save error:', e.message); }
+    }
+
+    let localState = { lastIndex: 68, dailySent: 0, accountIndex: 0, lastDate: '', startedAt: Date.now() };
     if (fs.existsSync(STATE_FILE)) {
-        try { state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch (e) { }
+        try { localState = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch (e) { }
+    }
+
+    // Determine the true index (DB priority, but fallback to local if DB is fresh)
+    const dbState = await getDbState();
+    let state = { ...localState };
+    if (dbState && dbState.lastIndex > state.lastIndex) {
+        console.log(`📡  Sync: DB index (${dbState.lastIndex}) is ahead of local (${state.lastIndex}). Using DB.`);
+        state.lastIndex = dbState.lastIndex;
+    } else {
+        console.log(`📡  Sync: Local index (${state.lastIndex}) is current.`);
     }
 
     const todayUTC = new Date().toDateString();
@@ -185,12 +233,12 @@ async function main() {
         return;
     }
 
-    console.log(`📊  Progress: ${state.lastIndex}/${leads.length} leads sent so far`);
+    console.log(`📊  Progress: ${state.lastIndex}/${leads.length} leads reached so far`);
     console.log(`📊  Today:    ${state.dailySent} sent today\n`);
 
     // ── Random initial sleep (0–25 min) so trigger time ≠ send time ──
     const initialSleepMin = randBetween(0, 25);
-    if (initialSleepMin > 0) {
+    if (initialSleepMin > 0 && !process.env.DEBUG) {
         const actualTime = new Date(Date.now() + initialSleepMin * 60000).toISOString();
         console.log(`😴  Sleeping ${initialSleepMin} min before first send...`);
         console.log(`    First email will fire at ~${actualTime}\n`);
@@ -216,10 +264,7 @@ async function main() {
             leadIdx++;
         }
 
-        if (leadIdx >= leads.length) {
-            console.log('🎉 No more valid leads.');
-            break;
-        }
+        if (leadIdx >= leads.length) { break; }
 
         const subjectType = SUBJECT_TYPES[(state.accountIndex || 0) % SUBJECT_TYPES.length];
 
@@ -230,19 +275,20 @@ async function main() {
                 state.dailySent = (state.dailySent || 0) + 1;
                 state.accountIndex = (state.accountIndex || 0) + 1;
                 totalSent++;
-                fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-            } else {
-                state.lastIndex = leadIdx + 1;
-                fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+
+                // CRITICAL: Update DB immediately so next run knows we moved on
+                await updateDbState(state.lastIndex);
+
+                // Still try to update local file for redundancy (and local testing)
+                try { fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2)); } catch (e) { }
             }
         } catch (err) {
             console.error(`  ❌  ${account.name} send failed: ${err.message}`);
-            state.lastIndex = leadIdx + 1;
-            fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+            // Don't advance index on hard error so we can retry
         }
 
         // Between accounts: wait 10–20 minutes (skip after last account)
-        if (a < ACCOUNTS.length - 1) {
+        if (a < ACCOUNTS.length - 1 && totalSent > 0) {
             const gapMin = randBetween(10, 20);
             console.log(`⏳  Waiting ${gapMin} min before next account sends...\n`);
             await sleep(gapMin * 60 * 1000);
@@ -250,7 +296,7 @@ async function main() {
     }
 
     console.log(`\n✨  Run complete. Sent ${totalSent}/3 emails this session.`);
-    console.log(`📊  Total progress: ${state.lastIndex}/${leads.length} leads reached.`);
+    console.log(`📊  Total progress: ${state.lastIndex}/${leads.length} leads.`);
     console.log(`📈  Dashboard: ${TRACKER_BASE_URL}`);
 }
 
