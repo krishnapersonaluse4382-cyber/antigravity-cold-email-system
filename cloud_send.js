@@ -97,33 +97,33 @@ function getNextDueStep(lead) {
     // INITIAL EMAIL (If nothing sent yet)
     if (!lead['p-sent']) return 'p-sent';
 
-    function verifyDataIntegrity(leads, state) {
-        console.log('🔍  Running Pre-Run Audit...');
+    return null; // All done or cooling down
+}
 
-        // 1. Check for "The Batch Bug" (Too many emails on one day)
-        const stats = {};
-        leads.forEach(l => {
-            if (l['p-sent']) {
-                stats[l['p-sent']] = (stats[l['p-sent']] || 0) + 1;
-            }
-        });
+function verifyDataIntegrity(leads, state) {
+    console.log('🔍  Running Pre-Run Audit...');
 
-        for (const [date, count] of Object.entries(stats)) {
-            if (count > 25) { // Warmup Phase Safety: We never intentionally send >24 (3 accounts * 8 emails) per day.
-                throw new Error(`CRITICAL: CSV Integrity Failure. Date ${date} has ${count} sent emails. This exceeds our Warmup Phase limit of 24. Audit aborted.`);
-            }
+    // 1. Check for "The Batch Bug" (Too many emails on one day)
+    const stats = {};
+    leads.forEach(l => {
+        if (l['p-sent']) {
+            stats[l['p-sent']] = (stats[l['p-sent']] || 0) + 1;
         }
+    });
 
-        // 2. Cross-check index with CSV
-        const csvSentCount = leads.filter(l => l['p-sent']).length;
-        if (Math.abs(csvSentCount - state.lastIndex) > 10) {
-            console.warn(`⚠️  Audit Warning: state.lastIndex (${state.lastIndex}) is inconsistent with CSV sent count (${csvSentCount}).`);
+    for (const [date, count] of Object.entries(stats)) {
+        if (count > 25) { // Warmup Phase Safety: We never intentionally send >24 (3 accounts * 8 emails) per day.
+            throw new Error(`CRITICAL: CSV Integrity Failure. Date ${date} has ${count} sent emails. This exceeds our Warmup Phase limit of 24. Audit aborted.`);
         }
-
-        console.log('✅  Audit passed. Data looks logical.');
     }
 
-    return null; // All done or cooling down
+    // 2. Cross-check index with CSV
+    const csvSentCount = leads.filter(l => l['p-sent']).length;
+    if (Math.abs(csvSentCount - state.lastIndex) > 10) {
+        console.warn(`⚠️  Audit Warning: state.lastIndex (${state.lastIndex}) is inconsistent with CSV sent count (${csvSentCount}).`);
+    }
+
+    console.log('✅  Audit passed. Data looks logical.');
 }
 
 function escapeHtml(s) {
