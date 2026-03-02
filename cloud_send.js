@@ -94,6 +94,9 @@ function getNextDueStep(lead) {
         return null;
     }
 
+    // INITIAL EMAIL (If nothing sent yet)
+    if (!lead['p-sent']) return 'p-sent';
+
     function verifyDataIntegrity(leads, state) {
         console.log('🔍  Running Pre-Run Audit...');
 
@@ -167,6 +170,7 @@ async function logEmailSent({ emailId, recipient, subject, sender, subjectType, 
                 subject_type: subjectType,
                 body_type: 'CASHVERTISING',
                 lead_source: 'YouTube',
+                step: campaignStep,
                 sent_at: new Date().toISOString()
             })
         });
@@ -174,6 +178,45 @@ async function logEmailSent({ emailId, recipient, subject, sender, subjectType, 
     } catch (e) {
         console.warn('  ⚠ Supabase error:', e.message);
     }
+}
+
+/**
+ * 🚨 CRITICAL SAFETY CHECK: Pings Supabase to see if this recipient
+ * was emailed TODAY or for this SPECIFIC STEP.
+ * This is the ultimate fix for the "Amnesia" Bug.
+ */
+async function isDuplicateSend(recipient, step) {
+    if (!SUPABASE_ANON_KEY) return false;
+
+    // Check if recipient was emailed TODAY
+    const startOfToday = new Date().toISOString().split('T')[0] + 'T00:00:00Z';
+
+    try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/email_sent?recipient=eq.${recipient}&sent_at=gte.${startOfToday}&select=id,step`, {
+            headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+        });
+        const records = await res.json();
+
+        if (records && records.length > 0) {
+            console.warn(`🛑  Safety Block: ${recipient} was already emailed today (found in Supabase).`);
+            return true;
+        }
+
+        const resStep = await fetch(`${SUPABASE_URL}/rest/v1/email_sent?recipient=eq.${recipient}&step=eq.${step}&select=id`, {
+            headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
+        });
+        const stepRecords = await resStep.json();
+        if (stepRecords && stepRecords.length > 0) {
+            console.warn(`🛑  Safety Block: ${recipient} already received step '${step}' in Supabase.`);
+            return true;
+        }
+
+    } catch (e) {
+        console.error('⚠️  Safety Check Failed (Supabase Offline): Stopping to be safe.', e.message);
+        return true;
+    }
+
+    return false;
 }
 
 // ─── SEND ONE EMAIL ────────────────────────────────────────────────────────────
@@ -218,6 +261,13 @@ async function sendOne(account, lead, leadIdx) {
 
     const transporter = createTransporter(account);
 
+    // ─── AMNESIA FIX: DOUBLE CHECK SUPABASE BEFORE SEND ───
+    const isDup = await isDuplicateSend(email, campaignStep);
+    if (isDup) {
+        console.log(`  ⏩ [SKIP] Supabase blocked sending to ${email}. Syncing local CSV.`);
+        return { step: campaignStep, date: formatDate(new Date()) };
+    }
+
     try {
         await transporter.sendMail({
             from: account.from,
@@ -253,11 +303,7 @@ function formatDate(date) {
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 async function main() {
-    console.log('🛑 EMERGENCY STOP: Campaigns have been manually disabled by the user.');
-    console.log('🛑 Reason: Re-sending emails error detected.');
-    process.exit(0);
-
-    console.log('☁️  Content Elevators — Cloud Email Sender');
+    console.log('☁️  Content Elevators — Cloud Email Sender (3-EMAIL TEST RUN)');
     console.log(`🕐  Triggered: ${new Date().toISOString()}`);
     console.log('═══════════════════════════════════════════\n');
 
@@ -351,9 +397,9 @@ async function main() {
     for (let a = 0; a < ACCOUNTS.length; a++) {
         const account = ACCOUNTS[a];
 
-        // PRIORITIZE: F3 -> F2 -> F1 -> Next Hook (starting from lastIndex)
+        // PRIORITIZE: ONLY Initial Emails (p-sent) for this test run
         let targetIdx = -1;
-        const scanSteps = ['f3', 'f2', 'f1', 'p-sent'];
+        const scanSteps = ['p-sent'];
 
         for (const step of scanSteps) {
             for (let i = 0; i < leads.length; i++) {
@@ -394,7 +440,7 @@ async function main() {
         }
 
         if (a < ACCOUNTS.length - 1 && totalSentThisRun > 0) {
-            const gapMin = randBetween(10, 20);
+            const gapMin = 5; // Exactly 5 minutes between sends
             console.log(`⏳  Sent! Waiting ${gapMin} min before ${ACCOUNTS[a + 1].name} takes the next lead...\n`);
             await sleep(gapMin * 60 * 1000);
         }
