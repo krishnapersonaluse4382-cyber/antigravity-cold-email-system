@@ -1,67 +1,58 @@
 /**
- * BodyEngine.js - Cashvertising Edition
- * Implements 90-day content loop scaling (Hooks, Scripts, Editing, Analysis).
+ * BodyEngine.js - Multi-Variability Email Body Generator
+ * Uses "Sentence Rotation" and Cashvertising principles to ensure high performance and maximum deliverability.
  */
-
 class BodyEngine {
-    constructor() { }
+    constructor() {
+        this.variations = {
+            // --- INITIAL HOOKS ---
+            H1: [
+                "I just saw your recent listing in {{City}} and had a quick thought about your video strategy. Are you doing any of the content for this yourself?",
+                "Caught your recent property update in {{City}}. Love the listing, but I think you're leaving a lot of money and attention on the table with the way your YouTube content is structured.",
+                "Found your listing in {{City}} and had to reach out. I've been following your YouTube for a bit now, and I had a quick observation about your engagement strategy."
+            ],
+            // --- FOLLOW-UP 1 (THE BUMP) ---
+            F1_BUMP: [
+                "Hey {{FirstName}}, just wanted to quickly bump this to the top of your inbox. I know things get incredibly busy with new listings.",
+                "Hey {{FirstName}}, checking in real quick to make sure this didn't get lost in your inbox. I'd love to chat more about your Real Estate content goals.",
+                "Hey {{FirstName}}, did you have a chance to see my last email? I'd really love to walk you through what we're seeing in the {{City}} market right now."
+            ],
+            // --- FOLLOW-UP 2 (SOCIAL PROOF) ---
+            F2_PROOF: [
+                "I wanted to share a quick result we got for a similar property in a different market. We were able to increase organic views by 21% in just 8 days by adjusting one simple factor.",
+                "Thought you'd might like to see this. We've been seeing some massive success lately by focusing on 'Micro-Hooks' for Real Estate videos. It literally changes the entire dynamic of the listing.",
+                "I've got a quick case study that might interest you. We worked with a Realtor recently who was struggling to get any traction on YouTube - we made one change and her engagement shot up 3x."
+            ],
+            // --- FOLLOW-UP 3 (THE BREAKUP) ---
+            F3_BREAKUP: [
+                "It seems like this isn't a priority for you right now, which is totally fine. I won't reach out again, but if you're ever looking to scale your Real Estate video game, you know where to find me.",
+                "I'm guessing you've got your hands full with listings in {{City}}, so I'll take you off my list for now. Wish you all the best with your growth!",
+                "Hey {{FirstName}}, I haven't heard back, so I'll assume you're all set with your current video strategy. I'll be here if you ever decide to take things to the next level."
+            ]
+        };
+    }
 
-    generate(subjectObj, data) {
-        const { firstName, senderName } = data;
-        const id = subjectObj.id;
+    /**
+     * @param {object} subjectObj - From SubjectEngine
+     * @param {object} context - { firstName, senderName, city, industry }
+     */
+    generate(subjectObj, context = {}) {
+        const id = subjectObj.id || 'H1';
+        const pool = this.variations[id] || this.variations['H1'];
 
-        if (id === 'FOLLOWER_GENERIC') {
-            return `Hi ${firstName}, your viewer/follower here!
+        // Randomly rotate between variations for maximum anti-spam variability
+        const rawBody = pool[Math.floor(Math.random() * pool.length)];
 
-I’ve been watching your videos and honestly, I’m inspired by the depth you bring to the Real Estate space. But as I was watching your latest one this morning, I noticed a subtle "Attention Leak" that I see even the top 1% making.
+        const city = context.city || 'your area';
+        const name = context.firstName || 'there';
+        const sender = context.senderName || 'our team';
 
-It’s the exact reason why most high-level pros stay at their current reach even when their information is gold. Your content is informative, but the brain isn't being "imprisoned" by the hook phase, so people subconsciously scroll before your value even kicks in.
-
-I’ve spent the last year building a 90-day content loop specifically to stop this. It’s a system that combines psychological Hooks, submerged Scripts, and emotional Editing to make sure your expertise translates into the exposure it actually deserves. Usually, this 4-step framework doubles a profile's reach because it stops the viewer from thinking about anything else but your video.
-
-I recorded a 90-second Loom walkthrough of your page showing exactly where that leak is.
-
-Open to seeing it?
-
-Best,
-${senderName}`;
-        }
-
-        if (id === 'FAMILY_DAD') {
-            return `Hey ${firstName},
-
-My dad actually just flagged your video to me. He's a fan, but looking at it from my perspective, I spotted a "Silent Barrier" on your profile that is likely capping your growth.
-
-It’s like having a high-end storefront where the door is accidentally locked. You're sharing incredible value, but the current way your videos are structured is allowing people to tune out. In a market like yours, that’s a lot of potential buyers just walking past your door every single day.
-
-I help people fix this using a 90-day system—Hooks, Scripts, strategic Editing, and deep Analysis. It’s designed to synchronize your expertise with how the human brain actually processes social media, ensuring the exposure you’re currently leaving on the table finally comes back to you as ROI.
-
-I've already mapped out an "Exposure Audit" for your recent videos. Leading with a fix is just my way of proving I can actually deliver.
-
-Should I send the video over?
-
-Best,
-${senderName}`;
-        }
-
-        if (id === 'AUTHORITY_RANKING') {
-            return `Hey ${firstName},
-
-Saw your name in a recent ranking and it caught my eye because you clearly belong at the top. But looking at your content loop, there’s an "Authority Disconnect" happening that most leaders ignore until it's too late.
-
-This is actually the EXACT message my clients are receiving after making one major shift in their content loop. Right now, your videos share great info, but the presentation style says "standard creator" while your actual expertise says "Market Leader." This gap is what stops the algorithm from rewarding you, because the viewers' subconscious sees a mismatch and loses interest.
-
-I help high-level pros bridge this gap in 90 days. We use a specific system of psychological Hooks and Storytelling frameworks to make your visual presence match your actual competence. It's about turning your informative content into an emotional connection that brings in more buyers and doubles your visibility.
-
-I recorded a quick walkthrough for you showing exactly how this shift looks for your page.
-
-Let me know and I'll send it over.
-
-Best,
-${senderName}`;
-        }
-
-        return `Hey ${firstName}, I recorded a quick 90-second walkthrough for your profile regarding your current video reach. Open to seeing it?`;
+        return rawBody
+            .replace(/{{City}}/gi, city)
+            .replace(/{{FirstName}}/gi, name)
+            .replace(/{{Name}}/gi, name)
+            .replace(/{{SenderName}}/gi, sender)
+            + `\n\nTalk soon,\n${sender}`;
     }
 }
 

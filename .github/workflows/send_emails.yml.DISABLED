@@ -61,11 +61,11 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: node cloud_send.js
 
-      - name: Commit updated email state back to repo
+      - name: Commit updated email state and leads back to repo
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "GitHub Actions"
           git pull --rebase origin main
-          git add email_state.json
-          git diff --staged --quiet || git commit -m "chore: update email state [skip ci]"
+          git add email_state.json leads_tracked.csv
+          git diff --staged --quiet || git commit -m "chore: update email state and leads [skip ci]"
           git push

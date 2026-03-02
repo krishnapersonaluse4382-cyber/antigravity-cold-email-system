@@ -4,6 +4,7 @@
 
 const nodemailer = require('nodemailer');
 const { parse } = require('csv-parse/sync');
+const { stringify } = require('csv-stringify/sync');
 const fs = require('fs');
 const crypto = require('crypto');
 
@@ -18,7 +19,7 @@ const TRACKER_BASE_URL = 'https://email-tracker-contentelevators.vercel.app';
 const SUPABASE_URL = 'https://psqebjafyjrtxarphkej.supabase.co';
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
 
-const LEADS_CSV = 'cleaned_leads.csv';
+const LEADS_CSV = 'leads_tracked.csv';
 const STATE_FILE = 'email_state.json';
 
 // ─── ACCOUNTS — passwords read from GitHub Secrets ────────────────────────────
@@ -40,6 +41,86 @@ function getFirstName(name) {
     if (!name) return 'there';
     const raw = name.trim().split(/[\s,–\-]+/)[0];
     return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
+
+function saveLeads(leads) {
+    try {
+        const output = stringify(leads, { header: true });
+        fs.writeFileSync(LEADS_CSV, output);
+    } catch (err) {
+        console.error(`❌  Failed to save leads to ${LEADS_CSV}: ${err.message}`);
+    }
+}
+
+function parseDate(dateStr) {
+    if (!dateStr) return null;
+    const parts = dateStr.split('-');
+    if (parts.length !== 3) return null;
+    const day = parseInt(parts[0], 10);
+    const monthStr = parts[1];
+    const year = 2000 + parseInt(parts[2], 10);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months.indexOf(monthStr);
+    if (month === -1) return null;
+    return new Date(year, month, day);
+}
+
+function daysBetween(d1, d2) {
+    if (!d1 || !d2) return 0;
+    return Math.floor(Math.abs(d1 - d2) / (1000 * 60 * 60 * 24));
+}
+
+function getNextDueStep(lead) {
+    const today = new Date();
+
+    // Check F3 Due (4+ days after F2)
+    if (lead['f2'] && !lead['f3']) {
+        const lastDate = parseDate(lead['f2']);
+        if (lastDate && daysBetween(today, lastDate) >= 4) return 'f3';
+        return null; // Not due yet
+    }
+
+    // Check F2 Due (3+ days after F1)
+    if (lead['f1'] && !lead['f2']) {
+        const lastDate = parseDate(lead['f1']);
+        if (lastDate && daysBetween(today, lastDate) >= 3) return 'f2';
+        return null;
+    }
+
+    // Check F1 Due (2+ days after p-sent)
+    if (lead['p-sent'] && !lead['f1']) {
+        const lastDate = parseDate(lead['p-sent']);
+        if (lastDate && daysBetween(today, lastDate) >= 2) return 'f1';
+        return null;
+    }
+
+    function verifyDataIntegrity(leads, state) {
+        console.log('🔍  Running Pre-Run Audit...');
+
+        // 1. Check for "The Batch Bug" (Too many emails on one day)
+        const stats = {};
+        leads.forEach(l => {
+            if (l['p-sent']) {
+                stats[l['p-sent']] = (stats[l['p-sent']] || 0) + 1;
+            }
+        });
+
+        for (const [date, count] of Object.entries(stats)) {
+            if (count > 25) { // Warmup Phase Safety: We never intentionally send >24 (3 accounts * 8 emails) per day.
+                throw new Error(`CRITICAL: CSV Integrity Failure. Date ${date} has ${count} sent emails. This exceeds our Warmup Phase limit of 24. Audit aborted.`);
+            }
+        }
+
+        // 2. Cross-check index with CSV
+        const csvSentCount = leads.filter(l => l['p-sent']).length;
+        if (Math.abs(csvSentCount - state.lastIndex) > 10) {
+            console.warn(`⚠️  Audit Warning: state.lastIndex (${state.lastIndex}) is inconsistent with CSV sent count (${csvSentCount}).`);
+        }
+
+        console.log('✅  Audit passed. Data looks logical.');
+    }
+
+    return null; // All done or cooling down
 }
 
 function escapeHtml(s) {
@@ -66,7 +147,7 @@ function createTransporter(account) {
     });
 }
 
-async function logEmailSent({ emailId, recipient, subject, sender, subjectType }) {
+async function logEmailSent({ emailId, recipient, subject, sender, subjectType, campaignStep }) {
     if (!SUPABASE_ANON_KEY) { console.warn('  ⚠ No Supabase key — skipping log'); return; }
     try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/email_sent`, {
@@ -96,22 +177,33 @@ async function logEmailSent({ emailId, recipient, subject, sender, subjectType }
 }
 
 // ─── SEND ONE EMAIL ────────────────────────────────────────────────────────────
-async function sendOne(account, lead, leadIdx, subjectTypeOverride) {
+async function sendOne(account, lead, leadIdx) {
     const rawEmail = (lead.Email || lead.email || '').trim();
     const email = rawEmail.replace(/[^a-zA-Z0-9@._+-].*$/, '').trim();
 
     if (!email || !email.includes('@')) {
         console.log(`  [${leadIdx}] ⏭  Skipping — invalid email for ${lead.Name || 'unknown'}`);
-        return false;
+        return null;
+    }
+
+    // --- SEQUENCE SELECTOR ---
+    const campaignStep = getNextDueStep(lead);
+    if (!campaignStep) return null;
+
+    let subjectType = 'FOLLOWER_HOOK';
+    if (campaignStep === 'p-sent') {
+        const hooks = ['FOLLOWER_HOOK', 'FAMILY_HOOK', 'AUTHORITY_HOOK'];
+        subjectType = hooks[Math.floor(Math.random() * hooks.length)];
+    } else {
+        subjectType = `FOLLOWUP_${campaignStep.slice(1)}`; // f1 -> FOLLOWUP_1
     }
 
     const firstName = getFirstName(lead.Name || lead.name);
-    const subjectObj = subjectEngine.generate(subjectTypeOverride, { firstName, industry: 'Real Estate' });
-    const subject = subjectObj.subject
+    const subjectObj = subjectEngine.generate(subjectType, { firstName, industry: 'Real Estate' });
+
+    const finalSubject = subjectObj.subject
         .replace(/{{FirstName}}/gi, firstName)
-        .replace(/{{Name}}/gi, firstName)
-        .replace(/{{first name}}/gi, firstName)
-        .replace(/{{name}}/gi, firstName);
+        .replace(/{{Name}}/gi, firstName);
 
     const bodyText = bodyEngine.generate(subjectObj, {
         firstName,
@@ -125,29 +217,46 @@ async function sendOne(account, lead, leadIdx, subjectTypeOverride) {
     const htmlBody = buildHtml(bodyText, trackUrl, subjectObj.preview || '');
 
     const transporter = createTransporter(account);
-    await transporter.sendMail({
-        from: account.from,
-        to: email,
-        subject,
-        text: bodyText,
-        html: htmlBody
-    });
 
-    await logEmailSent({
-        emailId,
-        recipient: email,
-        subject,
-        sender: account.user,
-        subjectType: subjectObj.id
-    });
+    try {
+        await transporter.sendMail({
+            from: account.from,
+            to: email,
+            subject: finalSubject,
+            text: bodyText,
+            html: htmlBody
+        });
 
-    console.log(`  ✅  ${account.name} → ${firstName} <${email}>`);
-    console.log(`       Subject: "${subject}"\n`);
-    return true;
+        await logEmailSent({
+            emailId,
+            recipient: email,
+            subject: finalSubject,
+            sender: account.user,
+            subjectType: subjectObj.id,
+            campaignStep: campaignStep
+        });
+
+        console.log(`  ✅ [${campaignStep}]  ${account.name} → ${firstName} <${email}>`);
+
+        return { step: campaignStep, date: formatDate(new Date()) };
+    } catch (err) {
+        console.error(`  ❌  ${account.name} send to ${email} failed: ${err.message}`);
+        return false;
+    }
+}
+
+function formatDate(date) {
+    const d = new Date(date);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear().toString().slice(-2)}`;
 }
 
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 async function main() {
+    console.log('🛑 EMERGENCY STOP: Campaigns have been manually disabled by the user.');
+    console.log('🛑 Reason: Re-sending emails error detected.');
+    process.exit(0);
+
     console.log('☁️  Content Elevators — Cloud Email Sender');
     console.log(`🕐  Triggered: ${new Date().toISOString()}`);
     console.log('═══════════════════════════════════════════\n');
@@ -156,19 +265,32 @@ async function main() {
     const missing = ACCOUNTS.filter(a => !a.pass).map(a => a.name);
     if (missing.length) {
         console.error(`❌ Missing GitHub Secrets for: ${missing.join(', ')}`);
-        console.error('   Repo → Settings → Secrets → Actions → Add the missing ones.');
         process.exit(1);
     }
 
-    // ── Load leads ──
-    if (!fs.existsSync(LEADS_CSV)) {
-        console.error(`❌ ${LEADS_CSV} not found in repo.`);
+    // ── Load data ──
+    const leads = parse(fs.readFileSync(LEADS_CSV, 'utf8'), { columns: true, skip_empty_lines: true });
+
+    let localState = { lastIndex: 88, dailySent: 0, accountIndex: 0, lastDate: '', startedAt: Date.now() };
+    if (fs.existsSync(STATE_FILE)) {
+        try {
+            localState = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        } catch (e) {
+            console.warn('⚠️  Could not parse local state, using defaults.');
+        }
+    }
+
+    // 🛑 DATA INTEGRITY FAILSAFE
+    try {
+        verifyDataIntegrity(leads, localState);
+    } catch (err) {
+        console.error(`\n❌  FATAL SAFETY ERROR: ${err.message}`);
         process.exit(1);
     }
-    const leads = parse(fs.readFileSync(LEADS_CSV, 'utf8'), { columns: true, skip_empty_lines: true });
+
     console.log(`✅  Loaded ${leads.length} leads`);
 
-    // ── Load state from Supabase — Falling back to local file if DB fails ──
+    // ── Load state ──
     async function getDbState() {
         if (!SUPABASE_ANON_KEY) return null;
         try {
@@ -207,19 +329,11 @@ async function main() {
         } catch (e) { console.warn('  ⚠ DB State save error:', e.message); }
     }
 
-    let localState = { lastIndex: 68, dailySent: 0, accountIndex: 0, lastDate: '', startedAt: Date.now() };
-    if (fs.existsSync(STATE_FILE)) {
-        try { localState = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8')); } catch (e) { }
-    }
-
-    // Determine the true index (DB priority, but fallback to local if DB is fresh)
     const dbState = await getDbState();
     let state = { ...localState };
     if (dbState && dbState.lastIndex > state.lastIndex) {
-        console.log(`📡  Sync: DB index (${dbState.lastIndex}) is ahead of local (${state.lastIndex}). Using DB.`);
+        console.log(`📡  Sync: DB index (${dbState.lastIndex}) is ahead of local. Using DB.`);
         state.lastIndex = dbState.lastIndex;
-    } else {
-        console.log(`📡  Sync: Local index (${state.lastIndex}) is current.`);
     }
 
     const todayUTC = new Date().toDateString();
@@ -228,76 +342,66 @@ async function main() {
         state.lastDate = todayUTC;
     }
 
-    if (state.lastIndex >= leads.length) {
-        console.log('\n🎉 All leads have been emailed! Nothing to do.');
-        return;
-    }
+    console.log(`📊  Progress: Lead Index #${state.lastIndex}`);
+    console.log(`📊  Total today: ${state.dailySent} sent\n`);
 
-    console.log(`📊  Progress: ${state.lastIndex}/${leads.length} leads reached so far`);
-    console.log(`📊  Today:    ${state.dailySent} sent today\n`);
-
-    // ── Random initial sleep (0–25 min) so trigger time ≠ send time ──
-    const initialSleepMin = randBetween(0, 25);
-    if (initialSleepMin > 0 && !process.env.DEBUG) {
-        const actualTime = new Date(Date.now() + initialSleepMin * 60000).toISOString();
-        console.log(`😴  Sleeping ${initialSleepMin} min before first send...`);
-        console.log(`    First email will fire at ~${actualTime}\n`);
-        await sleep(initialSleepMin * 60 * 1000);
-    }
-
-    // ── Send 1 email per account, staggered ──────────────────────────────────
-    // Krishna → wait 10–20 min → Ryan → wait 10–20 min → Rik
-    // This means 3 emails from the same "session" are 10–20 minutes apart,
-    // never simultaneous, and from completely different email addresses.
-    let totalSent = 0;
+    // ── Staggered Multi-Account Send ──
+    let totalSentThisRun = 0;
 
     for (let a = 0; a < ACCOUNTS.length; a++) {
         const account = ACCOUNTS[a];
 
-        // Find the next valid lead for this account
-        let leadIdx = state.lastIndex;
-        while (leadIdx < leads.length) {
-            const rawEmail = (leads[leadIdx].Email || leads[leadIdx].email || '').trim();
-            const email = rawEmail.replace(/[^a-zA-Z0-9@._+-].*$/, '').trim();
-            if (email && email.includes('@')) break;
-            console.log(`  ⏭  Skipping invalid email at index ${leadIdx}`);
-            leadIdx++;
+        // PRIORITIZE: F3 -> F2 -> F1 -> Next Hook (starting from lastIndex)
+        let targetIdx = -1;
+        const scanSteps = ['f3', 'f2', 'f1', 'p-sent'];
+
+        for (const step of scanSteps) {
+            for (let i = 0; i < leads.length; i++) {
+                // If checking p-sent, only look forward from our global pointer
+                if (step === 'p-sent' && i < state.lastIndex) continue;
+
+                if (getNextDueStep(leads[i]) === step) {
+                    targetIdx = i;
+                    break;
+                }
+            }
+            if (targetIdx !== -1) break;
         }
 
-        if (leadIdx >= leads.length) { break; }
-
-        const subjectType = SUBJECT_TYPES[(state.accountIndex || 0) % SUBJECT_TYPES.length];
+        if (targetIdx === -1) {
+            console.log(`  ⏹ No candidates found for any sequence stage right now.`);
+            break;
+        }
 
         try {
-            const sent = await sendOne(account, leads[leadIdx], leadIdx, subjectType);
-            if (sent) {
-                state.lastIndex = leadIdx + 1;
-                state.dailySent = (state.dailySent || 0) + 1;
-                state.accountIndex = (state.accountIndex || 0) + 1;
-                totalSent++;
+            const result = await sendOne(account, leads[targetIdx], targetIdx);
+            if (result) {
+                // Update memories
+                leads[targetIdx][result.step] = result.date;
+                if (result.step === 'p-sent') state.lastIndex = targetIdx + 1;
 
-                // CRITICAL: Update DB immediately so next run knows we moved on
+                state.dailySent++;
+                state.accountIndex++;
+                totalSentThisRun++;
+
+                // FAILSAVE: Commit everything immediately
+                saveLeads(leads);
                 await updateDbState(state.lastIndex);
-
-                // Still try to update local file for redundancy (and local testing)
-                try { fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2)); } catch (e) { }
+                fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
             }
         } catch (err) {
-            console.error(`  ❌  ${account.name} send failed: ${err.message}`);
-            // Don't advance index on hard error so we can retry
+            console.error(`  ❌ Failed sending via ${account.name}: ${err.message}`);
         }
 
-        // Between accounts: wait 10–20 minutes (skip after last account)
-        if (a < ACCOUNTS.length - 1 && totalSent > 0) {
+        if (a < ACCOUNTS.length - 1 && totalSentThisRun > 0) {
             const gapMin = randBetween(10, 20);
-            console.log(`⏳  Waiting ${gapMin} min before next account sends...\n`);
+            console.log(`⏳  Sent! Waiting ${gapMin} min before ${ACCOUNTS[a + 1].name} takes the next lead...\n`);
             await sleep(gapMin * 60 * 1000);
         }
     }
 
-    console.log(`\n✨  Run complete. Sent ${totalSent}/3 emails this session.`);
-    console.log(`📊  Total progress: ${state.lastIndex}/${leads.length} leads.`);
-    console.log(`📈  Dashboard: ${TRACKER_BASE_URL}`);
+    console.log(`\n✨ Run over. ${totalSentThisRun} emails sent.`);
+    console.log(`📈 Dashboard: ${TRACKER_BASE_URL}`);
 }
 
 main().catch(err => {
