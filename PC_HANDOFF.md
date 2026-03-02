@@ -1,13 +1,6 @@
-# PC Hand-Off & Execution Guide
-
-## Context for the AI
-**DO NOT SCAN UNRELATED FILES.** We are executing a 3-email dry run for the Cold Email Automation system.
-The previous session already finalized the email copies in `Engine/SubjectEngine.js` and `Engine/BodyEngine.js`, and updated `cloud_send.js` to run a strict 3-email test (1 per account: Krishna, Ryan, Rik) with exactly 5 minutes of wait time between them. 
-The manual kill-switch in `cloud_send.js` has been removed.
-
-## What the AI needs to do NOW:
-The user is ready to run the test from this PC. 
-1. **Verify Credentials:** The user needs to run the script. Ask the user if they want to run it via the terminal using `node cloud_send.js`.
-2. **Environment Variables:** Remind the user that they will need the passwords (`KRISHNA_PASS`, `RYAN_PASS`, `RIK_PASS`, `SUPABASE_ANON_KEY`) in their local `.env` file since they are running it locally, OR they can trigger the GitHub Action manually from the GitHub website to let the server run it using Secrets.
-3. If they run it locally, assist them with executing `node cloud_send.js` in the `ColdEmailAutomation` folder. 
-4. **Goal:** Ensure exactly 3 initial emails (p-sent) go out (or are logged to Supabase if Nodemailer is still mocked), and ensure there are no duplicates.
+# INSTRUCTIONS FOR PC AI (DO NOT SEARCH LOCAL DIRECTORIES)
+1. The user's project is located on GitHub: https://github.com/krishnapersonaluse4382-cyber/antigravity-cold-email-system
+2. Ask the user if they'd like you to clone/pull this repository for them onto this PC, or if they already have it open in their workspace.
+3. If they already have it, navigate to the `ColdEmailAutomation` folder.
+4. We (the Laptop AI) just finished modifying `cloud_send.js` to run a strict 3-email dry test (1 email per account, exactly 5 mins apart). 
+5. CRITICAL: Your only goal is to assist the user in executing `node cloud_send.js` in the `ColdEmailAutomation` folder to run the 3-email test send. If it fails due to missing `.env` credentials, either ask the user to provide them locally or instruct them to trigger the GitHub Action manually from the repository so the server runs it using Secrets.
