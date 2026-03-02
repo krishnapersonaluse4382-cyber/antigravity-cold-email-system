@@ -33,7 +33,9 @@ class SubjectEngine {
         const subject = rawSubject
             .replace(/{{City}}/gi, city)
             .replace(/{{FirstName}}/gi, name)
-            .replace(/{{Name}}/gi, name);
+            .replace(/{{Name}}/gi, name)
+            .replace(/{{followers}}/gi, context.followers || 'your audience')
+            .replace(/{{industry}}/gi, context.industry || 'real estate');
 
         return {
             id: entry.id,
