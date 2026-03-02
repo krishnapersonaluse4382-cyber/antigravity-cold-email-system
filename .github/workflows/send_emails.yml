@@ -1,34 +1,21 @@
 name: Send Cold Emails
 
-# ── HOW THIS WORKS ────────────────────────────────────────────────────────────
-# 8 triggers spread across the day (IST times listed in comments).
-# Each trigger:
-#   1. Sleeps a random 0–25 min (so actual send time is unpredictable)
-#   2. Sends 1 email from Krishna
-#   3. Waits a random 10–20 min gap
-#   4. Sends 1 email from Ryan
-#   5. Waits a random 10–20 min gap
-#   6. Sends 1 email from Rik
+# ── HOW THIS WORKS (TEST RUN) ──────────────────────────────────────────────────
+# This is currently configured ONLY for a 3-email test run.
 #
-# Result: 8 runs × 3 accounts = 24 emails per day
-# Each account sends exactly 8 emails, all at genuinely different times.
-# No two accounts ever fire at the same moment.
+# Each manual trigger:
+#   1. Sends 1 initial email from Krishna
+#   2. Waits exactly 5 minutes
+#   3. Sends 1 initial email from Ryan
+#   4. Waits exactly 5 minutes
+#   5. Sends 1 initial email from Rik
+#
+# Result: 1 run × 3 accounts = 3 emails per run
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
-  schedule:
-    - cron: '0 3 * * *'    # ~08:30 AM IST
-    - cron: '0 4 * * *'    # ~09:30 AM IST
-    - cron: '30 5 * * *'   # ~11:00 AM IST
-    - cron: '0 7 * * *'    # ~12:30 PM IST
-    - cron: '30 8 * * *'   # ~02:00 PM IST
-    - cron: '0 10 * * *'   # ~03:30 PM IST
-    - cron: '30 11 * * *'  # ~05:00 PM IST
-    - cron: '0 13 * * *'   # ~06:30 PM IST
-
   # Manual trigger — visible in GitHub → Actions tab → "Send Cold Emails" → "Run workflow"
   workflow_dispatch:
-
 
 permissions:
   contents: write
