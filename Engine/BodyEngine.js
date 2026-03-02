@@ -44,12 +44,15 @@ class BodyEngine {
         const name = context.firstName || 'there';
         const sender = context.senderName || 'our team';
 
-        return "Hey {{FirstName}},\n\n" + rawBody
+        const template = "Hey {{FirstName}},\n\n" + rawBody + `\n\nBest,\n{{SenderName}}`;
+
+        return template
             .replace(/{{City}}/gi, city)
             .replace(/{{FirstName}}/gi, name)
             .replace(/{{Name}}/gi, name)
-            .replace(/{{SenderName}}/gi, sender)
-            + `\n\nBest,\n${sender}`;
+            .replace(/{{followers}}/gi, context.followers || 'your audience')
+            .replace(/{{industry}}/gi, context.industry || 'real estate')
+            .replace(/{{SenderName}}/gi, sender);
     }
 }
 
