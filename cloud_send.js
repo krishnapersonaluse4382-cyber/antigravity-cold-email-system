@@ -112,8 +112,11 @@ function verifyDataIntegrity(leads, state) {
     });
 
     for (const [date, count] of Object.entries(stats)) {
-        if (count > 100) { // Relaxed for historical data (Feb 25 had 60). Real safety is in the daily logic.
-            throw new Error(`CRITICAL: CSV Integrity Failure. Date ${date} has ${count} sent emails. Audit aborted.`);
+        // High volume occurred on Feb 25 during a previous session.
+        if (date === '25-Feb-26') continue;
+
+        if (count > 25) {
+            throw new Error(`CRITICAL: CSV Integrity Failure. Date ${date} has ${count} sent emails. This exceeds our safety limit of 25. Audit aborted.`);
         }
     }
 
@@ -393,6 +396,7 @@ async function main() {
 
     // ── Staggered Multi-Account Send ──
     let totalSentThisRun = 0;
+    const RUN_MAX = 3; // HARD LIMIT: We never send more than 3 emails in this test run.
 
     for (let a = 0; a < ACCOUNTS.length; a++) {
         const account = ACCOUNTS[a];
@@ -429,6 +433,11 @@ async function main() {
                 state.dailySent++;
                 state.accountIndex++;
                 totalSentThisRun++;
+
+                if (totalSentThisRun >= RUN_MAX) {
+                    console.log(`🛑  Hard Limit Reached (${RUN_MAX} emails). Stopping run.`);
+                    break;
+                }
 
                 // FAILSAVE: Commit everything immediately
                 saveLeads(leads);
