@@ -51,7 +51,9 @@ const ACCOUNTS = [
 ];
 
 const SUBJECT_CATEGORIES = [
+    'ENGAGEMENT_HOOK',
     'FOLLOWER_HOOK',
+    'INVENTORY_HOOK',
     'FAMILY_HOOK',
     'AUTHORITY_HOOK'
 ];
@@ -299,8 +301,22 @@ async function main() {
         if (!email || !email.includes('@')) {
             console.log(`  [${state.lastIndex + 1}] Skipping — no valid email for ${lead.Name}`);
             state.lastIndex++;
+            saveState(state);
             continue;
         }
+
+        // --- NEW: DUPLICATE CHECK AGAINST CSV ---
+        const trackedContent = fs.readFileSync('leads_tracked.csv', 'utf8');
+        const trackedLeads = parse(trackedContent, { columns: true, skip_empty_lines: true });
+        const alreadyTracked = trackedLeads.find(l => l.Email?.trim() === email.trim() && l['p-sent']);
+
+        if (alreadyTracked) {
+            console.log(`  [${state.lastIndex + 1}] Skipping — ${email} already marked as sent in leads_tracked.csv (${alreadyTracked['p-sent']})`);
+            state.lastIndex++;
+            saveState(state);
+            continue;
+        }
+        // ----------------------------------------
 
         const emailId = generateEmailId();
         const trackingUrl = `${TRACKER_BASE_URL}/api/track?id=${emailId}`;

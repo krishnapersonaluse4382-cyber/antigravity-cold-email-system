@@ -153,7 +153,7 @@ function createTransporter(account) {
     });
 }
 
-async function logEmailSent({ emailId, recipient, subject, sender, subjectType, campaignStep }) {
+async function logEmailSent({ emailId, recipient, subject, sender, subjectType, campaignStep, category, leadSource, campaignName }) {
     if (!SUPABASE_ANON_KEY) { console.warn('  ⚠ No Supabase key — skipping log'); return; }
     try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/email_sent`, {
@@ -166,13 +166,14 @@ async function logEmailSent({ emailId, recipient, subject, sender, subjectType, 
             },
             body: JSON.stringify({
                 email_id: emailId,
-                recipient,
+                recipient: recipient.toLowerCase(),
                 subject,
                 sender,
-                category: 'Real Estate',
+                category: category || 'Real Estate',
                 subject_type: subjectType,
                 body_type: 'CASHVERTISING',
-                lead_source: 'YouTube',
+                lead_source: leadSource || 'YouTube',
+                campaign_name: campaignName || 'Beta Launch',
                 step: campaignStep,
                 sent_at: new Date().toISOString()
             })
@@ -191,11 +192,12 @@ async function logEmailSent({ emailId, recipient, subject, sender, subjectType, 
 async function isDuplicateSend(recipient, step) {
     if (!SUPABASE_ANON_KEY) return false;
 
-    // Check if recipient was emailed TODAY
+    const normalizedRecipient = recipient.toLowerCase();
     const startOfToday = new Date().toISOString().split('T')[0] + 'T00:00:00Z';
 
     try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/email_sent?recipient=eq.${recipient}&sent_at=gte.${startOfToday}&select=id,step`, {
+        // Check if recipient was emailed TODAY (General limit)
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/email_sent?recipient=eq.${normalizedRecipient}&sent_at=gte.${startOfToday}&select=id,step`, {
             headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
         });
         const records = await res.json();
@@ -205,7 +207,7 @@ async function isDuplicateSend(recipient, step) {
             return true;
         }
 
-        const resStep = await fetch(`${SUPABASE_URL}/rest/v1/email_sent?recipient=eq.${recipient}&step=eq.${step}&select=id`, {
+        const resStep = await fetch(`${SUPABASE_URL}/rest/v1/email_sent?recipient=eq.${normalizedRecipient}&step=eq.${step}&select=id`, {
             headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': `Bearer ${SUPABASE_ANON_KEY}` }
         });
         const stepRecords = await resStep.json();
@@ -244,19 +246,23 @@ async function sendOne(account, lead, leadIdx) {
         subjectType = `FOLLOWUP_${campaignStep.slice(1)}`; // f1 -> FOLLOWUP_1
     }
 
-    const firstName = getFirstName(lead.Name || lead.name);
-    const subjectObj = subjectEngine.generate(subjectType, { firstName, industry: 'Real Estate' });
+    const firstName = getFirstName(lead.Name || lead.name || "friend");
+    const industry = lead.Industry || lead.industry || 'Real Estate';
+    const leadSource = lead.Source || lead.source || 'YouTube';
+    const campaignName = lead.Campaign || lead.campaign || 'Beta Launch v1';
 
-    const finalSubject = subjectObj.subject
-        .replace(/{{FirstName}}/gi, firstName)
-        .replace(/{{Name}}/gi, firstName);
-
-    const bodyText = bodyEngine.generate(subjectObj, {
+    // Build replacement context
+    const context = {
         firstName,
-        senderName: account.name,
+        industry,
         city: lead.City || lead.city || 'your area',
-        industry: 'Real Estate'
-    });
+        senderName: account.name,
+        platform: leadSource
+    };
+
+    const subjectObj = subjectEngine.generate(subjectType, context);
+    const finalSubject = subjectObj.subject; // Already replaced by engine
+    const bodyText = bodyEngine.generate(subjectObj, context); // Already replaced by engine
 
     const emailId = generateEmailId();
     const trackUrl = `${TRACKER_BASE_URL}/api/track?id=${emailId}`;
@@ -286,7 +292,10 @@ async function sendOne(account, lead, leadIdx) {
             subject: finalSubject,
             sender: account.user,
             subjectType: subjectObj.id,
-            campaignStep: campaignStep
+            campaignStep: campaignStep,
+            category: industry,
+            leadSource: leadSource,
+            campaignName: campaignName
         });
 
         console.log(`  ✅ [${campaignStep}]  ${account.name} → ${firstName} <${email}>`);
