@@ -14,6 +14,8 @@ name: Send Cold Emails
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
+  push:
+    branches: [ main ]
   # Manual trigger — visible in GitHub → Actions tab → "Send Cold Emails" → "Run workflow"
   workflow_dispatch:
   # Automated schedule - runs every hour to check the queue
