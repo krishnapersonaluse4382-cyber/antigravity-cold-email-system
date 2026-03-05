@@ -1,56 +1,52 @@
-/**
- * BodyEngine.js - Persuasive 1-2 Line Email Generator
- * PROTOCOL: Assumption Control + Specificity Framework
- * Rule: Focus on Universal Outcome Problems, NO Activity-Based Assumptions.
- */
 class BodyEngine {
     constructor() {
         this.variations = {
-            H1: [ // ENGAGEMENT_HOOK
-                "I noticed the engagement on your page—it's clear you have the authority, but is that attention actually converting into the inbound buyers you need? I help experts fix the logic-gaps that keep them from seeing consistent revenue growth. Open to a quick reply?",
-                "Great engagement on your recent posts, {{FirstName}}. But for most top-tier pros, views don't always mean predictable deal flow if there's an invisible leak in the inquiry path. I have a 90-second diagnostic showing exactly where these leads get lost—want me to send it over?"
+            H1: [ // Variation 1: The "Jordan" / Authority Dominance Angle (LF8: Superiority)
+                "That's exactly the kind of result my clients are seeing with our system—turning raw attention into the kind of dominance that makes you the only choice in {{City}}.\n\nI spent some time this morning looking at your latest moves. The level of competence you show is clearly high-tier, but I noticed a disconnect in your digital presence which is likely capping your influence and the volume of buyers reaching out to you.\n\nYou have the expertise, but there is a visible friction point in your content that is definitely affecting your reach and the chances of getting more visibility which brings buyers.\n\nWe help businesses like you in fixing the issue of getting more attention to get buyers. Do you want to see the issue so you can fix it to immediately get more reach and maximize your chances of getting buyers with your current setup? Feel free to reply."
             ],
-            H2: [ // FOLLOWER_HOOK
-                "Just followed your page! I love your properties in {{City}}, but I spotted a technical 'stop sign' on your profile that’s likely causing serious prospects to bounce. I have a 2-minute fix that guarantees 2x more views in 90 days—should I send the link?",
-                "Your follower here! I admire the professionalism you bring to {{industry}}, but from a conversion standpoint, a small technical detail might be costing you inbound interest every month. I recorded a short repair guide showing where the disconnect is—want to see it?"
+            H2: [ // Variation 2: The "Local Authority" Angle (LF8: Social Approval)
+                "This is the exact level of momentum we aim for in the first 30 days—converting raw visibility into being the primary authority in {{City}}.\n\nI caught your latest {{postType}} and while your competence is high-tier, I noticed a subtle 'attention leak' on your profile that's probably limiting the number of high-quality buyers reaching out to you.\n\nYou clearly have the status, but there's a visible friction point in your digital presence that is affecting your reach and the chances of getting more visibility for buyers.\n\nWe help businesses like you in fixing the issue of getting more attention to get buyers. Do you want to see the issue so you can fix it to immediately get more reach and maximize your chances of getting buyers with your current setup? Feel free to reply."
             ],
-            H3: [ // INVENTORY_HOOK
-                "I was looking for your current inventory in {{City}} but it’s actually quite difficult to find the specifics on your profile. I fix this inquiry friction so you can capture more high-net-worth buyers without the burnout of managing every step yourself. Should I send the blueprint?",
-                "Checking your page for listings, but there's a visible gap between your content and the next step for a serious buyer. I help experts bridge this so they can scale their exposure and deal flow predictably. Open to seeing the 90-second walkthrough?"
-            ],
-            H4: [ // FAMILY_HOOK
-                "My {{relation}} actually sent me your video on {{postType}} today—your clarity is rare in this market. But I noticed a logic-error on your page that's likely leaking high-intent leads to other agents in {{City}}. Open to a 90-second diagnostic of the fix?",
-                "My {{relation}} saw your {{postType}} and sent it to me because your market analysis in {{City}} stands out. You have the status, but your inquiry path might be creating friction for serious prospects. I have a 2-minute fix for this if you're open to a quick reply?"
-            ],
-            H5: [ // AUTHORITY_HOOK
-                "I saw your name in the top {{industry}} rankings recently. It’s clear you have the authority, but is your inquiry system actually matching your status? I help experts automate buyer-capture so they can focus on closing deals and reclaim their time. Open to a quick reply?",
-                "You're clearly the expert in {{City}}, but the technical bridge on your profile might be triggering a 'wait' response in prospects rather than a 'book' response. I have a simple blueprint that removes this uncertainty and stabilizes your lead flow. Should I send the link?"
+            H3: [ // Variation 3: The "Inquiry Engine" Angle (LF8: Comfort & Financial Success)
+                "Seeing results like {{metric}} shares is exactly what my clients experience—it's a sign that your 'Inquiry Engine' is ready to scale, provided the logic is correct.\n\nI was reviewing your {{industry}} work this morning and although the expertise is obvious, I noticed a disconnect that is likely capping your inbound volume and keeping buyers from contacting you.\n\nYou have the skill, but there is a visible friction point in your content that is definitely affecting your reach and the potential for getting more buyers in {{City}}.\n\nWe help businesses like you in fixing the issue of getting more attention to get buyers. Do you want to see the issue so you can fix it to immediately get more reach and maximize your chances of getting buyers with your current setup? Feel free to reply."
             ]
         };
     }
 
     generate(subjectObj, context = {}) {
-        const id = subjectObj.id || 'H1';
-        let pool = this.variations[id] || this.variations['H1'];
+        const variantKey = subjectObj.id || 'H1';
+        let pool = this.variations[variantKey] || this.variations['H1'];
+        if (variantKey === 'H4' || variantKey === 'H5') pool = this.variations['H1'];
+        if (variantKey === 'H2') pool = this.variations['H2'];
+        if (variantKey === 'H3') pool = this.variations['H3'];
 
-        const rawBody = pool[Math.floor(Math.random() * pool.length)];
+        const rawBody = pool[0]; // Currently 1 per variant
 
         const city = context.city || 'your area';
         const name = context.firstName || 'there';
-        const sender = context.senderName || 'our team';
-        const relation = context.relation || 'brother';
-        const postType = context.postType || 'video';
+        const sender = context.senderName || 'Krishna';
+        const postType = context.postType || 'reel';
+        const metric = subjectObj.metric || '1.2k';
+        const inquiryMatch = subjectObj.inquiryMatch || '19';
 
-        const greeting = `Hey ${name},\n\n`;
-        const bodyContent = rawBody
-            .replace(/{{City}}/gi, city)
-            .replace(/{{FirstName}}/gi, name)
-            .replace(/{{Name}}/gi, name)
-            .replace(/{{industry}}/gi, context.industry || 'real estate')
-            .replace(/{{relation}}/gi, relation)
-            .replace(/{{postType}}/gi, postType);
+        let body = rawBody;
 
-        return `${greeting}${bodyContent}\n\n-${sender}`;
+        const replacements = [
+            { regex: /{{FirstName}}|\[\[firstname}}|{{Name}}|{{firstname}}/gi, value: name },
+            { regex: /{{City}}|\[\[city}}|{{city}}/gi, value: city },
+            { regex: /{{metric}}/gi, value: metric },
+            { regex: /{{inquiryMatch}}/gi, value: inquiryMatch },
+            { regex: /{{postType}}/gi, value: postType },
+            { regex: /{{SenderName}}|{{sender}}/gi, value: sender },
+            { regex: /{{industry}}/gi, value: context.industry || 'Real Estate' }
+        ];
+
+        replacements.forEach(r => {
+            body = body.replace(r.regex, r.value);
+        });
+
+        const finalBody = `Hey ${name},\n\n${body}\n\nBest,\n\n${sender}`;
+        return finalBody;
     }
 }
 

@@ -16,6 +16,9 @@ name: Send Cold Emails
 on:
   # Manual trigger — visible in GitHub → Actions tab → "Send Cold Emails" → "Run workflow"
   workflow_dispatch:
+  # Automated schedule - runs every hour to check the queue
+  schedule:
+    - cron: '30 * * * *' # Every hour at minute 30
 
 permissions:
   contents: write
@@ -40,19 +43,20 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Send emails (1 per account, staggered)
+      - name: Execute scheduled campaign (Jordan Beta 9)
         env:
           KRISHNA_PASS:     ${{ secrets.KRISHNA_PASS }}
           RYAN_PASS:        ${{ secrets.RYAN_PASS }}
           RIK_PASS:         ${{ secrets.RIK_PASS }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: node cloud_send.js
+        run: node schedule_executor.js
 
-      - name: Commit updated email state and leads back to repo
+      - name: Commit updated queue and leads back to repo
         run: |
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git config --global user.name "GitHub Actions"
           git pull --rebase origin main
-          git add email_state.json leads_tracked.csv
-          git diff --staged --quiet || git commit -m "chore: update email state and leads [skip ci]"
+          git add campaign_queue.json leads_tracked.csv email_state.json
+          git diff --staged --quiet || git commit -m "chore: update campaign queue and lead tracker [skip ci]"
           git push
+

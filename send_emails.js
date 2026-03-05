@@ -160,17 +160,19 @@ function escapeHtml(str) {
 
 // ─── SUPABASE LOG ─────────────────────────────────────────────────────────────
 async function logEmailSent(data) {
-    const { emailId, recipient, subject, sender, category, subjectType, bodyType, source } = data;
+    const { emailId, recipient, subject, sender, category, subjectType, bodyType, source, campaignName, step } = data;
     try {
         const payload = {
             email_id: emailId,
-            recipient,
+            recipient: recipient.toLowerCase(),
             subject,
             sender,
             category: category || 'General',
             subject_type: subjectType,
-            body_type: bodyType,
+            body_type: bodyType || 'CASHVERTISING',
             lead_source: source || 'Direct',
+            campaign_name: campaignName || 'Beta Launch',
+            step: step || 'p-sent',
             sent_at: new Date().toISOString()
         };
 

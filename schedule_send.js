@@ -21,8 +21,10 @@ const LEADS_CSV = 'cleaned_leads.csv';
 const STATE_FILE = 'email_state.json';
 
 // Total batch config
-const EMAILS_PER_ACCOUNT = 8;
-const TOTAL_EMAILS = 24; // 3 accounts x 8
+const EMAILS_PER_ACCOUNT = 3;
+const TOTAL_EMAILS = 9; // 3 accounts x 3
+
+const SKIP_SEND = process.env.SKIP_SEND === 'true';
 
 // ─── ACCOUNTS ─────────────────────────────────────────────────────────────────
 const ACCOUNTS = [
@@ -30,6 +32,7 @@ const ACCOUNTS = [
     { name: 'Ryan', user: 'ryan@contentelevators.org', pass: 'dmnt ndpd izme pysd', from: 'Ryan | Content Elevators <ryan@contentelevators.org>' },
     { name: 'Rik', user: 'rik@contentelevators.org', pass: 'ycwt xsxq aegk ltak', from: 'Rik | Content Elevators <rik@contentelevators.org>' }
 ];
+
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -68,7 +71,7 @@ function createTransporter(account) {
     });
 }
 
-async function logEmailSent({ emailId, recipient, subject, sender, subjectType }) {
+async function logEmailSent({ emailId, recipient, subject, sender, subjectType, campaignName, step }) {
     try {
         await fetch(`${SUPABASE_URL}/rest/v1/email_sent`, {
             method: 'POST',
@@ -80,13 +83,15 @@ async function logEmailSent({ emailId, recipient, subject, sender, subjectType }
             },
             body: JSON.stringify({
                 email_id: emailId,
-                recipient,
+                recipient: recipient.toLowerCase(),
                 subject,
                 sender,
                 category: 'Real Estate',
                 subject_type: subjectType,
                 body_type: 'CASHVERTISING',
                 lead_source: 'YouTube',
+                campaign_name: campaignName || 'Beta Launch',
+                step: step || 'p-sent',
                 sent_at: new Date().toISOString()
             })
         });
@@ -96,30 +101,34 @@ async function logEmailSent({ emailId, recipient, subject, sender, subjectType }
 }
 
 // ─── GENERATE RANDOMIZED SCHEDULE ────────────────────────────────────────────
-// Spreads 24 emails from NOW to ~22:00 local time with random intervals.
+// Spreads 9 emails from tomorrow morning (Friday) to Saturday night with random intervals.
 function generateSchedule(leads, startIndex) {
-    const now = Date.now();
-    const endOfDay = new Date();
-    endOfDay.setHours(22, 0, 0, 0); // 10 PM today
-    const windowMs = endOfDay.getTime() - now;
+    const startTime = new Date();
+    startTime.setDate(startTime.getDate() + 1); // Tomorrow (Friday)
+    startTime.setHours(9, 0, 0, 0);
 
-    // Generate 24 random timestamps within the window
+    const endTime = new Date();
+    endTime.setDate(endTime.getDate() + 2); // Day after tomorrow (Saturday)
+    endTime.setHours(21, 0, 0, 0);
+
+    const windowMs = endTime.getTime() - startTime.getTime();
+
+    // Generate 9 random timestamps within the window
     const times = [];
     for (let i = 0; i < TOTAL_EMAILS; i++) {
-        // Guaranteed at least 3 min gap from now + some random spread
-        times.push(now + Math.floor(Math.random() * windowMs));
+        times.push(startTime.getTime() + Math.floor(Math.random() * windowMs));
     }
     times.sort((a, b) => a - b);
 
-    // Enforce minimum 2-minute gap between consecutive sends
+    // Enforce minimum 15-minute gap
+    const minGap = 15 * 60 * 1000;
     for (let i = 1; i < times.length; i++) {
-        const minGap = 2 * 60 * 1000; // 2 minutes minimum
         if (times[i] - times[i - 1] < minGap) {
             times[i] = times[i - 1] + minGap;
         }
     }
 
-    // Build schedule: round-robin accounts (Krishna→Ryan→Rik→Krishna...)
+    // Build schedule: round-robin accounts (Krishna→Ryan→Rik)
     const schedule = [];
     for (let i = 0; i < TOTAL_EMAILS; i++) {
         const leadIdx = startIndex + i;
@@ -132,9 +141,11 @@ function generateSchedule(leads, startIndex) {
 
         const account = ACCOUNTS[i % ACCOUNTS.length];
         const firstName = getFirstName(lead.Name || lead.name);
+
+        // Use H1-H3 for body variation picking
         const subjectObj = subjectEngine.generate(
-            ['FOLLOWER_HOOK', 'FAMILY_HOOK', 'AUTHORITY_HOOK'][i % 3],
-            { firstName, industry: 'Real Estate' }
+            ['ENGAGEMENT_HOOK', 'FOLLOWER_HOOK', 'INVENTORY_HOOK'][i % 3],
+            { firstName, city: lead.City || lead.city || 'your area', industry: 'Real Estate' }
         );
 
         schedule.push({
@@ -151,10 +162,12 @@ function generateSchedule(leads, startIndex) {
     return schedule;
 }
 
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 async function main() {
-    console.log('📧 Content Elevators — Scheduled Email Blast (24 Emails)');
-    console.log('═══════════════════════════════════════════════════════\n');
+    console.log('📧 Content Elevators — 9 Email "Jordan Beta" Staggered Blast');
+    console.log('═══════════════════════════════════════════════════════════\n');
+
 
     // Load leads
     const leads = parse(fs.readFileSync(LEADS_CSV, 'utf8'), { columns: true, skip_empty_lines: true });
@@ -181,15 +194,23 @@ async function main() {
     }
 
     // ── PRINT SCHEDULE ──
-    console.log('📅 SEND SCHEDULE (all times local):');
+    console.log('📅 SEND SCHEDULE (randomized within Friday morning to Saturday night):');
     console.log('─────────────────────────────────────────────────────────────────');
     schedule.forEach((item, i) => {
-        const t = new Date(item.sendAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-        const delay = Math.round((item.sendAt - Date.now()) / 60000);
-        console.log(`  [${String(i + 1).padStart(2, '0')}] ${t}  (+${delay}m)  ${item.account.name.padEnd(8)} → ${item.firstName.padEnd(12)} <${item.email}>`);
+        const d = new Date(item.sendAt);
+        const t = d.toLocaleTimeString('en-IN', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+        const delay = Math.round((item.sendAt - Date.now()) / 60000 / 60);
+        console.log(`  [${String(i + 1).padStart(2, '0')}] ${t}  (+${delay}h)  ${item.account.name.padEnd(8)} → ${item.firstName.padEnd(12)} <${item.email}>`);
     });
     console.log('─────────────────────────────────────────────────────────────────');
+
+    if (SKIP_SEND) {
+        console.log('\n🔍 Preview mode enabled. No emails will be sent.');
+        return;
+    }
+
     console.log(`\n🚀 Starting send loop. Press Ctrl+C at any time to stop gracefully.\n`);
+
 
     let stopped = false;
     process.on('SIGINT', () => { console.log('\n🛑 Stop requested. Will finish current email then halt.'); stopped = true; });
@@ -216,9 +237,10 @@ async function main() {
             firstName: item.firstName,
             senderName: item.account.name,
             city: item.lead.City || item.lead.city || 'your area',
-            industry: 'Real Estate'
+            industry: 'Real Estate',
+            ...item.subjectObj
         });
-        const subject = item.subjectObj.subject.replace('{{FirstName}}', item.firstName).replace('{{Name}}', item.firstName).replace('{{first name}}', item.firstName).replace('{{name}}', item.firstName);
+        const subject = item.subjectObj.subject;
         const htmlBody = buildHtml(bodyText, trackUrl, item.subjectObj.preview || '');
 
         try {
@@ -236,8 +258,11 @@ async function main() {
                 recipient: item.email,
                 subject,
                 sender: item.account.user,
-                subjectType: item.subjectObj.id
+                subjectType: item.subjectObj.id,
+                campaignName: 'Jordan Beta 9',
+                step: 'p-sent'
             });
+
 
             sentCount++;
             state.lastIndex = item.leadIdx + 1;
@@ -255,7 +280,8 @@ async function main() {
         }
     }
 
-    console.log(`\n✨ Done! Sent ${sentCount}/24 emails.`);
+    console.log(`\n✨ Done! Sent ${sentCount}/9 emails.`);
+
     console.log(`📈 Dashboard: ${TRACKER_BASE_URL}`);
 }
 
