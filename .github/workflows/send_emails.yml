@@ -18,7 +18,7 @@ on:
   workflow_dispatch:
   # Automated schedule - runs every hour to check the queue
   schedule:
-    - cron: '30 * * * *' # Every hour at minute 30
+    - cron: '*/15 * * * *' # Every 15 minutes to process the randomized queue accurately
 
 permissions:
   contents: write
