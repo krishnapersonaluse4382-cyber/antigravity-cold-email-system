@@ -2,12 +2,7 @@ const fs = require('fs');
 const nodemailer = require('nodemailer');
 const { parse } = require('csv-parse/sync');
 const { stringify } = require('csv-stringify/sync');
-const SubjectEngine = require('./Engine/SubjectEngine');
-const BodyEngine = require('./Engine/BodyEngine');
 const https = require('https');
-
-const subjectEngine = new SubjectEngine();
-const bodyEngine = new BodyEngine();
 
 // Config
 const QUEUE_FILE = 'campaign_queue.json';
@@ -47,7 +42,7 @@ async function logToSupabase(payload) {
                 res.on('data', d => data += d);
                 res.on('end', () => {
                     console.error(`❌ Supabase Error: ${res.statusCode} ${data}`);
-                    resolve(); // Don't crash
+                    resolve();
                 });
             }
         });
@@ -65,12 +60,12 @@ async function logToSupabase(payload) {
 function updateTrackedCsv(email, dateStr) {
     try {
         if (!fs.existsSync(TRACKED_CSV)) return;
-        const content = fs.readFileSync(TRACKED_CSV, 'utf8');
-        const leads = parse(content, { columns: true });
+        const csvContent = fs.readFileSync(TRACKED_CSV, 'utf8');
+        const leads = parse(csvContent, { columns: true, skip_empty_lines: true });
 
         let found = false;
         for (const lead of leads) {
-            if (lead.Email.toLowerCase() === email.toLowerCase()) {
+            if (lead.Email && lead.Email.toLowerCase() === email.toLowerCase()) {
                 lead['p-sent'] = dateStr;
                 found = true;
                 break;
@@ -78,7 +73,8 @@ function updateTrackedCsv(email, dateStr) {
         }
 
         if (found) {
-            fs.writeFileSync(TRACKED_CSV, stringify(leads, { header: true }));
+            const output = stringify(leads, { header: true });
+            fs.writeFileSync(TRACKED_CSV, output);
             console.log(`📝 Tracking CSV updated for ${email}`);
         }
     } catch (e) {
@@ -87,7 +83,10 @@ function updateTrackedCsv(email, dateStr) {
 }
 
 async function main() {
-    if (!fs.existsSync(QUEUE_FILE)) return;
+    if (!fs.existsSync(QUEUE_FILE)) {
+        console.log('Queue file not found. Skipping.');
+        return;
+    }
     const queue = JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf8'));
     const now = Date.now();
     const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, '-');
@@ -104,8 +103,8 @@ async function main() {
                 continue;
             }
 
-            const subjectObj = subjectEngine.generate(null, { firstName: item.firstName });
-            const bodyText = bodyEngine.generate(subjectObj, { firstName: item.firstName, senderName: item.account });
+            const finalSubject = item.subject;
+            const finalBody = item.body;
 
             try {
                 const transporter = nodemailer.createTransport({
@@ -116,8 +115,8 @@ async function main() {
                 await transporter.sendMail({
                     from: acc.from,
                     to: item.email,
-                    subject: subjectObj.subject,
-                    text: bodyText
+                    subject: finalSubject,
+                    text: finalBody
                 });
 
                 console.log(`✅ Sent via ${item.account} to ${item.firstName}`);
@@ -127,15 +126,22 @@ async function main() {
                 changed = true;
 
                 updateTrackedCsv(item.email, todayStr);
+
+                let type = 'SOCIAL_PROOF';
+                if (finalSubject.toLowerCase().includes('houses') || finalSubject.toLowerCase().includes('listing')) type = 'INQUIRY';
+                if (finalSubject.toLowerCase().includes('mom') || finalSubject.toLowerCase().includes('video') || finalSubject.toLowerCase().includes('reel')) {
+                    if (!finalSubject.toLowerCase().includes('likes')) type = 'FAMILY';
+                }
+
                 await logToSupabase({
                     email_id: Math.random().toString(16).slice(2),
                     recipient: item.email,
-                    subject: subjectObj.subject,
+                    subject: finalSubject,
                     sender: acc.user,
                     category: 'Real Estate',
-                    subject_type: subjectObj.id,
+                    subject_type: type,
                     body_type: 'JORDAN_BETA',
-                    campaign_name: 'Jordan Beta 9',
+                    campaign_name: 'Inquiry Engine V2',
                     step: 'p-sent',
                     sent_at: new Date().toISOString()
                 });
