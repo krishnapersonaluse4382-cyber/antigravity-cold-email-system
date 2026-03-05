@@ -38,21 +38,25 @@ async function logToSupabase(payload) {
 }
 
 function updateTrackedCsv(email, dateStr) {
-    if (!fs.existsSync(TRACKED_CSV)) return;
-    const content = fs.readFileSync(TRACKED_CSV, 'utf8');
-    const leads = parse(content, { columns: true });
+    try {
+        if (!fs.existsSync(TRACKED_CSV)) return;
+        const content = fs.readFileSync(TRACKED_CSV, 'utf8');
+        const leads = parse(content, { columns: true });
 
-    let found = false;
-    for (const lead of leads) {
-        if (lead.Email.toLowerCase() === email.toLowerCase()) {
-            lead['p-sent'] = dateStr;
-            found = true;
-            break;
+        let found = false;
+        for (const lead of leads) {
+            if (lead.Email.toLowerCase() === email.toLowerCase()) {
+                lead['p-sent'] = dateStr;
+                found = true;
+                break;
+            }
         }
-    }
 
-    if (found) {
-        fs.writeFileSync(TRACKED_CSV, stringify(leads, { header: true }));
+        if (found) {
+            fs.writeFileSync(TRACKED_CSV, stringify(leads, { header: true }));
+        }
+    } catch (e) {
+        console.error(`Tracking CSV update failed for ${email}:`, e.message);
     }
 }
 
@@ -61,6 +65,8 @@ async function main() {
     const queue = JSON.parse(fs.readFileSync(QUEUE_FILE, 'utf8'));
     const now = Date.now();
     const todayStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, '-');
+
+    let changed = false;
 
     for (const item of queue) {
         if (!item.sent && item.sendAt <= now) {
@@ -88,15 +94,15 @@ async function main() {
                     text: bodyText
                 });
 
-                console.log(`✅ Sent via ${item.account}`);
+                console.log(`✅ Sent via ${item.account} to ${item.firstName}`);
 
+                // MARK AS SENT FIRST
                 item.sent = true;
                 item.actualSentAt = new Date().toISOString();
+                changed = true;
 
-                // 1. Update Excel (leads_tracked.csv)
+                // Then do background tasks
                 updateTrackedCsv(item.email, todayStr);
-
-                // 2. Update Dashboard (Supabase)
                 await logToSupabase({
                     email_id: Math.random().toString(16).slice(2),
                     recipient: item.email,
@@ -111,12 +117,14 @@ async function main() {
                 });
 
             } catch (err) {
-                console.error(`❌ Failed: ${err.message}`);
+                console.error(`❌ Failed send to ${item.firstName}: ${err.message}`);
             }
         }
     }
 
-    fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
+    if (changed) {
+        fs.writeFileSync(QUEUE_FILE, JSON.stringify(queue, null, 2));
+    }
 }
 
 main().catch(err => console.error(err));
