@@ -4,6 +4,7 @@ const { parse } = require('csv-parse/sync');
 const { stringify } = require('csv-stringify/sync');
 const SubjectEngine = require('./Engine/SubjectEngine');
 const BodyEngine = require('./Engine/BodyEngine');
+const https = require('https');
 
 const subjectEngine = new SubjectEngine();
 const bodyEngine = new BodyEngine();
@@ -21,20 +22,44 @@ const ACCOUNTS = {
 };
 
 async function logToSupabase(payload) {
-    try {
-        await fetch(`${SUPABASE_URL}/rest/v1/email_sent`, {
+    return new Promise((resolve, reject) => {
+        const body = JSON.stringify(payload);
+        const options = {
+            hostname: 'psqebjafyjrtxarphkej.supabase.co',
+            port: 443,
+            path: '/rest/v1/email_sent',
             method: 'POST',
             headers: {
+                'Content-Type': 'application/json',
                 'apikey': SUPABASE_ANON_KEY,
                 'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-                'Content-Type': 'application/json',
-                'Prefer': 'return=minimal'
-            },
-            body: JSON.stringify(payload)
+                'Prefer': 'return=minimal',
+                'Content-Length': body.length
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+                console.log(`✅ Supabase Log Success (${res.statusCode})`);
+                resolve();
+            } else {
+                let data = '';
+                res.on('data', d => data += d);
+                res.on('end', () => {
+                    console.error(`❌ Supabase Error: ${res.statusCode} ${data}`);
+                    resolve(); // Don't crash
+                });
+            }
         });
-    } catch (e) {
-        console.error('Supabase Error:', e.message);
-    }
+
+        req.on('error', (e) => {
+            console.error(`❌ Net Error: ${e.message}`);
+            resolve();
+        });
+
+        req.write(body);
+        req.end();
+    });
 }
 
 function updateTrackedCsv(email, dateStr) {
@@ -54,9 +79,10 @@ function updateTrackedCsv(email, dateStr) {
 
         if (found) {
             fs.writeFileSync(TRACKED_CSV, stringify(leads, { header: true }));
+            console.log(`📝 Tracking CSV updated for ${email}`);
         }
     } catch (e) {
-        console.error(`Tracking CSV update failed for ${email}:`, e.message);
+        console.error(`❌ Tracking CSV update failed for ${email}:`, e.message);
     }
 }
 
@@ -78,7 +104,7 @@ async function main() {
                 continue;
             }
 
-            const subjectObj = subjectEngine.generate(item.hook, { firstName: item.firstName });
+            const subjectObj = subjectEngine.generate(null, { firstName: item.firstName });
             const bodyText = bodyEngine.generate(subjectObj, { firstName: item.firstName, senderName: item.account });
 
             try {
@@ -96,12 +122,10 @@ async function main() {
 
                 console.log(`✅ Sent via ${item.account} to ${item.firstName}`);
 
-                // MARK AS SENT FIRST
                 item.sent = true;
                 item.actualSentAt = new Date().toISOString();
                 changed = true;
 
-                // Then do background tasks
                 updateTrackedCsv(item.email, todayStr);
                 await logToSupabase({
                     email_id: Math.random().toString(16).slice(2),
@@ -117,7 +141,7 @@ async function main() {
                 });
 
             } catch (err) {
-                console.error(`❌ Failed send to ${item.firstName}: ${err.message}`);
+                console.error(`❌ Failed send: ${err.message}`);
             }
         }
     }
