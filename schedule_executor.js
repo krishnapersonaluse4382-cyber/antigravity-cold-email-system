@@ -22,7 +22,7 @@ async function logToSupabase(payload) {
         const options = {
             hostname: 'psqebjafyjrtxarphkej.supabase.co',
             port: 443,
-            path: '/rest/v1/email_sent',
+            path: '/rest/v1/email_tracker',
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -134,7 +134,6 @@ async function main() {
                 }
 
                 await logToSupabase({
-                    email_id: Math.random().toString(16).slice(2),
                     recipient: item.email,
                     subject: finalSubject,
                     sender: acc.user,
