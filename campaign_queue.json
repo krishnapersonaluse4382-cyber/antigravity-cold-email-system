@@ -64,7 +64,8 @@
     "email": "lisaeaton.realtor@gmail.com",
     "subject": "quick question re: your {{Industry}} inquiries",
     "body": "Hey Lisa,\r\n\r\nWriting you because I admire the professionalism and the mindset you bring to your {{Industry}} work—your latest video was a great example of high-level competence.\r\n\r\nI spotted a \"Small Technical Error\" on your profile that my past clients used to ignore until it started capping their monthly growth. It's a 2-minute fix that shifts the 'work' from the client back onto your system.\r\n\r\nI’ve already recorded a 90-second repair guide for your page. I’m doing this because I’m searching for long-term strategic partners to build dominant lead-capture systems, and I find that providing a solution is a much more effective way to build authority than a sales pitch.\r\n\r\nShould I send the link over for you to see?\r\n\r\nBest, \r\nKrishna",
-    "sent": false
+    "sent": true,
+    "actualSentAt": "2026-03-06T19:49:26.837Z"
   },
   {
     "id": 7,
