@@ -95,6 +95,22 @@ async function main() {
 
     for (const item of queue) {
         if (!item.sent && item.sendAt <= now) {
+            // -- DURABLE SAFETY CHECK --
+            // Even if the JSON state is 'false' (e.g. Git sync error), 
+            // check the CSV to see if we already sent to this person today.
+            if (fs.existsSync(TRACKED_CSV)) {
+                const csvContent = fs.readFileSync(TRACKED_CSV, 'utf8');
+                if (csvContent.toLowerCase().includes(item.email.toLowerCase())) {
+                    const row = csvContent.split('\n').find(r => r.toLowerCase().includes(item.email.toLowerCase()));
+                    if (row && row.split(',')[2]) { // Check p-sent column
+                        console.log(`⚠️ Skip: ${item.email} already tracked in CSV. Marking queue as sent.`);
+                        item.sent = true;
+                        changed = true;
+                        continue;
+                    }
+                }
+            }
+
             console.log(`🚀 Sending scheduled email to ${item.firstName} (${item.email})...`);
 
             const acc = ACCOUNTS[item.account];
