@@ -14,8 +14,6 @@ name: Send Cold Emails
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
-  schedule:
-    - cron: '*/15 * * * *'
   push:
     branches: [ main ]
   workflow_dispatch:
