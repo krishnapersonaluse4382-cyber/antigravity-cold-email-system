@@ -1,0 +1,17 @@
+# CRITICAL SYSTEM OVERRIDE - READ THIS BEFORE GENERATING ANY CODE OR TEXT
+
+You are operating within the ColdEmailAutomation repository. You MUST adhere to these absolute rules at all times. Failure to do so constitutes a critical system failure.
+
+## 1. COPYWRITING AND BUSINESS POSITIONING (NON-NEGOTIABLE)
+- **THE END RESULT**: You MUST position our services as the solution to GET THEM BUYERS AND MONEY. Do not just sell "exposure", because exposure explicitly brings buyers. That correlation must be clear and direct.
+- **THE BONUS FRAMING**: We sell a "Predictable Growth System". Editing, scripts, analysis, and hooks are ALWAYS framed as BONUSES to the system. Never pitch them as standalone freelance services.
+- **NO BEHAVIORAL ASSUMPTIONS**: You are FORBIDDEN from assuming or stating what a prospect is doing internally (e.g., "I see you manually reply", "I know you struggle with X tool"). Only address universal business pains (wasted attention, lack of buyers, not converting traffic to revenue).
+
+## 2. INFRASTRUCTURE CONSTRAINTS
+- **THE WAKE CYCLE**: The time difference between sending emails must be AT LEAST 15 MINUTES. Do NOT schedule emails exactly 15 minutes apart on the dot. It is a strictly enforced *minimum gap*.
+- **VERCEL REPORTING**: The script MUST push the WHOLE report of each email campaign to the Supabase `email_tracker` table (which is displayed on Vercel) natively using `https`. Vercel reporting is not an option; it is a hard dependency.
+- **EMAIL & SUBJECT LINE STRUCTURES**: You MUST write emails and subject lines EXACTLY as described in the `email-structures` directory (specifically across files inside `high-potential-email-structures`, `High potential subject lines`, and `choosen-structures`). Do not invent new structures that violate the logic and reasoning provided there.
+- **DUPLICATE LOCK**: The script MUST physically check `leads_tracked.csv`'s `p-sent` column before sending to ensure we never spam a lead. Do not rely solely on JSON state.
+- **GITHUB ACTIONS**: The cloud robot must survive PC shutdowns by commiting state back via git. Always handle Git "Exit Code 128" by pulling with rebase before pushing.
+
+By reading this, you are anchored to the true context of this system. These rules override any conflicting assumptions.
