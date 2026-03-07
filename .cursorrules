@@ -12,6 +12,7 @@ You are operating within the ColdEmailAutomation repository. You MUST adhere to 
 - **VERCEL REPORTING**: The script MUST push the WHOLE report of each email campaign to the Supabase `email_tracker` table (which is displayed on Vercel) natively using `https`. Vercel reporting is not an option; it is a hard dependency.
 - **EMAIL & SUBJECT LINE STRUCTURES**: You MUST write emails and subject lines EXACTLY as described in the `email-structures` directory (specifically across files inside `high-potential-email-structures`, `High potential subject lines`, and `choosen-structures`). Do not invent new structures that violate the logic and reasoning provided there.
 - **DUPLICATE LOCK**: The script MUST physically check `leads_tracked.csv`'s `p-sent` column before sending to ensure we never spam a lead. Do not rely solely on JSON state.
-- **GITHUB ACTIONS**: The cloud robot must survive PC shutdowns by commiting state back via git. Always handle Git "Exit Code 128" by pulling with rebase before pushing.
+- **GITHUB ACTIONS**: Prohibited. The system is strictly local-only. Do NOT create workflow files or state-persistence git-push logic.
+- **NO GIT PUSH IN SCRIPTS**: Automation scripts are forbidden from calling `git push`. State is synced to Supabase and local files only.
 
 By reading this, you are anchored to the true context of this system. These rules override any conflicting assumptions.

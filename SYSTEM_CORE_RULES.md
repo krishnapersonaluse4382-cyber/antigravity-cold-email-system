@@ -38,11 +38,12 @@ These rules from the `CLIENT OUTREACH INSTRUCTION PROTOCOL` are non-negotiable f
 
 ---
 
-## 4. THE INFRASTRUCTURE & "CLOUD ROBOT" (GitHub Actions)
-The system is built to survive PC shutdowns.
-*   **The Engine**: GitHub Actions (`send_emails.yml`). 
-*   **The Wake Cycle**: The difference between email sends must be **AT LEAST 15 minutes**. **[CRITICAL DISTINCTION]**: This does *not* mean send every 15 minutes on the dot. It means a minimum 15-minute gap is strictly required. **[REJECTED]** Sending exactly every 15 minutes or using fixed-hour crons.
-*   **State Persistence (The Amnesia Fix)**: The prospect state must be recorded back to the repository. The workflow *must* run `git pull --rebase` before `git push origin main` to defeat `Exit Code 128`.
+## 4. THE INFRASTRUCTURE (LOCAL ONLY)
+The system is now **strictly local**. 
+*   **[REJECTED]**: GitHub Actions, Cloud Robots, or any server-side automated sending. 
+*   **The Engine**: Local execution via `run_scheduler.bat` or manual terminal commands.
+*   **The Wake Cycle**: The difference between email sends must be **AT LEAST 15 minutes**.
+*   **State Persistence**: State is maintained locally and synced to **Supabase**. Do NOT push state back to GitHub from automated scripts. GitHub is for code storage only.
 
 ---
 
